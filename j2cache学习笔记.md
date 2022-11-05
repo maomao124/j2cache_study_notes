@@ -66,7 +66,9 @@ j2cache从1.3.0版本开始支持JGroups和Redis Pub/Sub两种方式进行缓存
 
 ## j2cache入门案例
 
-第一步：创建工程j2cache_demo
+
+
+### 第一步：创建工程j2cache_demo
 
 
 
@@ -76,7 +78,7 @@ j2cache从1.3.0版本开始支持JGroups和Redis Pub/Sub两种方式进行缓存
 
 
 
-第二步：修改pom文件
+### 第二步：修改pom文件
 
 
 
@@ -153,7 +155,7 @@ j2cache从1.3.0版本开始支持JGroups和Redis Pub/Sub两种方式进行缓存
 
 
 
-第三步：修改application.yml文件
+### 第三步：修改application.yml文件
 
 
 
@@ -206,7 +208,7 @@ lettuce:
 
 
 
-第四步：启动Redis
+### 第四步：启动Redis
 
 
 
@@ -223,7 +225,7 @@ PONG
 
 
 
-第五步：创建/resources/caffeine.properties文件
+### 第五步：创建/resources/caffeine.properties文件
 
 
 
@@ -240,7 +242,7 @@ rx=50, 2h
 
 
 
-第六步：编写TestController
+### 第六步：编写TestController
 
 
 
@@ -353,7 +355,7 @@ public class TestController
 
 
 
-第七步：启动程序
+### 第七步：启动程序
 
 
 
@@ -390,7 +392,7 @@ public class TestController
 
 
 
-第八步：访问
+### 第八步：访问
 
 
 
@@ -599,6 +601,824 @@ Caused by: java.lang.reflect.InaccessibleObjectException: Unable to make field p
 
 
 
+
+
+
+
+
+## 测试缓存击穿
+
+
+
+### 第一步：修改TestController
+
+
+
+```java
+package mao.j2cache_demo.controller;
+
+import net.oschina.j2cache.CacheChannel;
+import net.oschina.j2cache.CacheObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * Project name(项目名称)：j2cache_demo
+ * Package(包名): mao.j2cache_demo.controller
+ * Class(类名): TestController
+ * Author(作者）: mao
+ * Author QQ：1296193245
+ * GitHub：https://github.com/maomao124/
+ * Date(创建日期)： 2022/11/5
+ * Time(创建时间)： 13:22
+ * Version(版本): 1.0
+ * Description(描述)： 无
+ */
+
+@RestController
+public class TestController
+{
+
+    private static final Logger log = LoggerFactory.getLogger(TestController.class);
+
+    @Autowired
+    private CacheChannel cacheChannel;
+
+    private final String key = "myKey";
+    private final String region = "rx";
+
+
+    @GetMapping("/getInfos")
+    public List<String> getInfos()
+    {
+        CacheObject cacheObject = cacheChannel.get(region, key);
+        if (cacheObject.getValue() == null)
+        {
+            log.info("查询数据库");
+            //缓存中没有找到，查询数据库获得
+            List<String> data = new ArrayList<>();
+            data.add("info1");
+            data.add("info2");
+            try
+            {
+                Thread.sleep(9);
+            }
+            catch (InterruptedException e)
+            {
+                e.printStackTrace();
+            }
+            //放入缓存
+            cacheChannel.set(region, key, data);
+            return data;
+        }
+        return (List<String>) cacheObject.getValue();
+    }
+
+    /**
+     * 清理指定缓存
+     *
+     * @return {@link String}
+     */
+    @GetMapping("/evict")
+    public String evict()
+    {
+        cacheChannel.evict(region, key);
+        return "evict success";
+    }
+
+    /**
+     * 检测存在哪级缓存
+     *
+     * @return {@link String}
+     */
+    @GetMapping("/check")
+    public String check()
+    {
+        int check = cacheChannel.check(region, key);
+        return "level:" + check;
+    }
+
+    /**
+     * 检测缓存数据是否存在
+     *
+     * @return {@link String}
+     */
+    @GetMapping("/exists")
+    public String exists()
+    {
+        boolean exists = cacheChannel.exists(region, key);
+        return "exists:" + exists;
+    }
+
+    /**
+     * 清理指定区域的缓存
+     *
+     * @return {@link String}
+     */
+    @GetMapping("/clear")
+    public String clear()
+    {
+        cacheChannel.clear(region);
+        return "clear success";
+    }
+}
+```
+
+
+
+
+
+
+
+### 第二步：启动程序，并打开jmeter
+
+
+
+![image-20221105140132022](img/j2cache学习笔记/image-20221105140132022.png)
+
+
+
+300线程并发
+
+
+
+### 第三步：设置http请求
+
+
+
+![image-20221105140203818](img/j2cache学习笔记/image-20221105140203818.png)
+
+
+
+![image-20221105140220728](img/j2cache学习笔记/image-20221105140220728.png)
+
+
+
+
+
+
+
+### 第四步：添加监听器
+
+
+
+![image-20221105140245308](img/j2cache学习笔记/image-20221105140245308.png)
+
+
+
+
+
+### 第五步：启动jmeter
+
+
+
+![image-20221105140313822](img/j2cache学习笔记/image-20221105140313822.png)
+
+
+
+
+
+### 第六步：主动清除缓存
+
+
+
+http://localhost:8080/clear
+
+
+
+
+
+![image-20221105140546295](img/j2cache学习笔记/image-20221105140546295.png)
+
+
+
+![image-20221105140536137](img/j2cache学习笔记/image-20221105140536137.png)
+
+
+
+
+
+![image-20221105140600493](img/j2cache学习笔记/image-20221105140600493.png)
+
+
+
+
+
+![image-20221105140621870](img/j2cache学习笔记/image-20221105140621870.png)
+
+
+
+
+
+有时候能同时通过两个请求，有时候能同时通过3个请求，没有完全解决缓存击穿问题，但是影响不大
+
+
+
+拿自己实现的缓存做比较
+
+
+
+```java
+package mao.j2cache_demo.controller;
+
+import net.oschina.j2cache.CacheChannel;
+import net.oschina.j2cache.CacheObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * Project name(项目名称)：j2cache_demo
+ * Package(包名): mao.j2cache_demo.controller
+ * Class(类名): TestController
+ * Author(作者）: mao
+ * Author QQ：1296193245
+ * GitHub：https://github.com/maomao124/
+ * Date(创建日期)： 2022/11/5
+ * Time(创建时间)： 13:22
+ * Version(版本): 1.0
+ * Description(描述)： 无
+ */
+
+@RestController
+public class TestController
+{
+
+    private static final Logger log = LoggerFactory.getLogger(TestController.class);
+
+    @Autowired
+    private CacheChannel cacheChannel;
+
+    private final String key = "myKey";
+    private final String region = "rx";
+
+
+    @GetMapping("/getInfos")
+    public List<String> getInfos()
+    {
+        CacheObject cacheObject = cacheChannel.get(region, key);
+        if (cacheObject.getValue() == null)
+        {
+            log.info("查询数据库");
+            //缓存中没有找到，查询数据库获得
+            List<String> data = new ArrayList<>();
+            data.add("info1");
+            data.add("info2");
+            //放入缓存
+            cacheChannel.set(region, key, data);
+            return data;
+        }
+        return (List<String>) cacheObject.getValue();
+    }
+
+    private String cache = null;
+
+    @GetMapping("/getInfos2")
+    public String getInfos2()
+    {
+        if (cache == null)
+        {
+            log.info("查询数据库2");
+            try
+            {
+                Thread.sleep(10);
+            }
+            catch (InterruptedException e)
+            {
+                e.printStackTrace();
+            }
+            cache = "hello";
+        }
+        else
+        {
+            return cache;
+        }
+        return cache;
+    }
+
+    /**
+     * 清理指定缓存
+     *
+     * @return {@link String}
+     */
+    @GetMapping("/evict")
+    public String evict()
+    {
+        cacheChannel.evict(region, key);
+        return "evict success";
+    }
+
+    /**
+     * 检测存在哪级缓存
+     *
+     * @return {@link String}
+     */
+    @GetMapping("/check")
+    public String check()
+    {
+        int check = cacheChannel.check(region, key);
+        return "level:" + check;
+    }
+
+    /**
+     * 检测缓存数据是否存在
+     *
+     * @return {@link String}
+     */
+    @GetMapping("/exists")
+    public String exists()
+    {
+        boolean exists = cacheChannel.exists(region, key);
+        return "exists:" + exists;
+    }
+
+    /**
+     * 清理指定区域的缓存
+     *
+     * @return {@link String}
+     */
+    @GetMapping("/clear")
+    public String clear()
+    {
+        cache = null;
+        cacheChannel.clear(region);
+        return "clear success";
+    }
+}
+```
+
+
+
+
+
+![image-20221105141549790](img/j2cache学习笔记/image-20221105141549790.png)
+
+
+
+
+
+![image-20221105141628699](img/j2cache学习笔记/image-20221105141628699.png)
+
+
+
+```sh
+2022-11-05 14:20:07.152  INFO 4668 --- [o-8080-exec-100] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.152  INFO 4668 --- [o-8080-exec-103] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.152  INFO 4668 --- [io-8080-exec-69] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.152  INFO 4668 --- [o-8080-exec-116] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.152  INFO 4668 --- [o-8080-exec-198] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.152  INFO 4668 --- [o-8080-exec-131] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.152  INFO 4668 --- [io-8080-exec-40] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.152  INFO 4668 --- [o-8080-exec-157] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.152  INFO 4668 --- [o-8080-exec-150] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.152  INFO 4668 --- [io-8080-exec-24] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.152  INFO 4668 --- [io-8080-exec-53] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.152  INFO 4668 --- [nio-8080-exec-6] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.152  INFO 4668 --- [io-8080-exec-10] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.152  INFO 4668 --- [io-8080-exec-71] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.152  INFO 4668 --- [io-8080-exec-94] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.152  INFO 4668 --- [io-8080-exec-99] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.152  INFO 4668 --- [o-8080-exec-195] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.152  INFO 4668 --- [o-8080-exec-192] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.152  INFO 4668 --- [io-8080-exec-49] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.152  INFO 4668 --- [io-8080-exec-76] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.152  INFO 4668 --- [o-8080-exec-170] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.152  INFO 4668 --- [o-8080-exec-140] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [io-8080-exec-13] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [o-8080-exec-190] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [io-8080-exec-26] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [io-8080-exec-31] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [o-8080-exec-159] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [o-8080-exec-123] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [io-8080-exec-90] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [io-8080-exec-61] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [o-8080-exec-179] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [o-8080-exec-200] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [io-8080-exec-35] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [io-8080-exec-60] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [o-8080-exec-135] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [io-8080-exec-83] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [io-8080-exec-63] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [io-8080-exec-37] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [io-8080-exec-84] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [io-8080-exec-23] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [io-8080-exec-85] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [o-8080-exec-184] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [io-8080-exec-97] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [io-8080-exec-93] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [io-8080-exec-89] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [io-8080-exec-51] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [io-8080-exec-38] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [o-8080-exec-194] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [o-8080-exec-177] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [o-8080-exec-197] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [io-8080-exec-33] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [o-8080-exec-120] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [o-8080-exec-160] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [o-8080-exec-108] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [io-8080-exec-17] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [io-8080-exec-96] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [io-8080-exec-12] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.154  INFO 4668 --- [io-8080-exec-22] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [io-8080-exec-98] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.154  INFO 4668 --- [io-8080-exec-72] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.155  INFO 4668 --- [nio-8080-exec-4] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.155  INFO 4668 --- [io-8080-exec-28] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [o-8080-exec-171] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.154  INFO 4668 --- [io-8080-exec-91] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.155  INFO 4668 --- [o-8080-exec-151] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [io-8080-exec-34] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [o-8080-exec-110] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [o-8080-exec-154] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.155  INFO 4668 --- [o-8080-exec-174] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [io-8080-exec-64] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.155  INFO 4668 --- [o-8080-exec-186] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.155  INFO 4668 --- [o-8080-exec-161] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [io-8080-exec-66] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.155  INFO 4668 --- [io-8080-exec-73] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [io-8080-exec-54] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [o-8080-exec-193] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.155  INFO 4668 --- [io-8080-exec-70] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [io-8080-exec-39] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [io-8080-exec-57] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [io-8080-exec-42] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.154  INFO 4668 --- [io-8080-exec-79] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.154  INFO 4668 --- [io-8080-exec-56] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.154  INFO 4668 --- [io-8080-exec-47] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.154  INFO 4668 --- [io-8080-exec-67] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.154  INFO 4668 --- [io-8080-exec-44] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.154  INFO 4668 --- [io-8080-exec-80] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.154  INFO 4668 --- [o-8080-exec-191] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.154  INFO 4668 --- [o-8080-exec-122] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.156  INFO 4668 --- [o-8080-exec-130] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.154  INFO 4668 --- [io-8080-exec-86] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.156  INFO 4668 --- [o-8080-exec-166] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.154  INFO 4668 --- [o-8080-exec-136] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.156  INFO 4668 --- [o-8080-exec-169] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [o-8080-exec-125] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.156  INFO 4668 --- [o-8080-exec-137] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.154  INFO 4668 --- [o-8080-exec-129] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.156  INFO 4668 --- [nio-8080-exec-7] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.154  INFO 4668 --- [nio-8080-exec-1] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.154  INFO 4668 --- [io-8080-exec-43] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.154  INFO 4668 --- [o-8080-exec-139] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.157  INFO 4668 --- [io-8080-exec-78] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.154  INFO 4668 --- [o-8080-exec-118] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.157  INFO 4668 --- [o-8080-exec-172] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.154  INFO 4668 --- [o-8080-exec-145] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.157  INFO 4668 --- [io-8080-exec-68] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.157  INFO 4668 --- [io-8080-exec-74] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.157  INFO 4668 --- [o-8080-exec-162] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.153  INFO 4668 --- [o-8080-exec-152] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.154  INFO 4668 --- [io-8080-exec-55] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.157  INFO 4668 --- [io-8080-exec-48] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.157  INFO 4668 --- [o-8080-exec-149] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.157  INFO 4668 --- [o-8080-exec-115] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.154  INFO 4668 --- [io-8080-exec-30] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.154  INFO 4668 --- [o-8080-exec-188] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.157  INFO 4668 --- [o-8080-exec-146] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.154  INFO 4668 --- [io-8080-exec-14] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.154  INFO 4668 --- [o-8080-exec-143] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.154  INFO 4668 --- [o-8080-exec-180] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.154  INFO 4668 --- [o-8080-exec-132] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.157  INFO 4668 --- [nio-8080-exec-8] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.158  INFO 4668 --- [io-8080-exec-58] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.154  INFO 4668 --- [o-8080-exec-142] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.158  INFO 4668 --- [io-8080-exec-92] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.154  INFO 4668 --- [o-8080-exec-165] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.158  INFO 4668 --- [io-8080-exec-87] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.154  INFO 4668 --- [o-8080-exec-173] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.154  INFO 4668 --- [o-8080-exec-114] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.158  INFO 4668 --- [o-8080-exec-164] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.155  INFO 4668 --- [o-8080-exec-156] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.155  INFO 4668 --- [o-8080-exec-126] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.155  INFO 4668 --- [nio-8080-exec-9] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.155  INFO 4668 --- [o-8080-exec-148] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.155  INFO 4668 --- [o-8080-exec-104] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.158  INFO 4668 --- [io-8080-exec-15] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.155  INFO 4668 --- [o-8080-exec-182] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.155  INFO 4668 --- [nio-8080-exec-3] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.158  INFO 4668 --- [io-8080-exec-21] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.155  INFO 4668 --- [o-8080-exec-147] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.158  INFO 4668 --- [o-8080-exec-102] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.155  INFO 4668 --- [o-8080-exec-155] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.156  INFO 4668 --- [o-8080-exec-128] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.158  INFO 4668 --- [o-8080-exec-106] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.156  INFO 4668 --- [o-8080-exec-199] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.156  INFO 4668 --- [o-8080-exec-107] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.156  INFO 4668 --- [io-8080-exec-32] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.159  INFO 4668 --- [io-8080-exec-11] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.159  INFO 4668 --- [o-8080-exec-196] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.156  INFO 4668 --- [o-8080-exec-153] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.156  INFO 4668 --- [io-8080-exec-82] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.159  INFO 4668 --- [io-8080-exec-36] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.156  INFO 4668 --- [o-8080-exec-178] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.156  INFO 4668 --- [io-8080-exec-16] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.159  INFO 4668 --- [io-8080-exec-18] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.156  INFO 4668 --- [o-8080-exec-109] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.156  INFO 4668 --- [io-8080-exec-65] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.156  INFO 4668 --- [o-8080-exec-141] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.157  INFO 4668 --- [o-8080-exec-189] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.159  INFO 4668 --- [io-8080-exec-46] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.157  INFO 4668 --- [io-8080-exec-52] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.157  INFO 4668 --- [io-8080-exec-41] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.157  INFO 4668 --- [io-8080-exec-27] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.157  INFO 4668 --- [o-8080-exec-138] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.159  INFO 4668 --- [o-8080-exec-144] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.157  INFO 4668 --- [io-8080-exec-20] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.157  INFO 4668 --- [o-8080-exec-117] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.157  INFO 4668 --- [o-8080-exec-134] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.157  INFO 4668 --- [io-8080-exec-45] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.158  INFO 4668 --- [nio-8080-exec-5] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.158  INFO 4668 --- [o-8080-exec-113] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.158  INFO 4668 --- [io-8080-exec-62] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.158  INFO 4668 --- [o-8080-exec-133] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.158  INFO 4668 --- [o-8080-exec-183] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.158  INFO 4668 --- [io-8080-exec-88] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.158  INFO 4668 --- [o-8080-exec-101] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.158  INFO 4668 --- [nio-8080-exec-2] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.158  INFO 4668 --- [o-8080-exec-185] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.158  INFO 4668 --- [o-8080-exec-121] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.158  INFO 4668 --- [io-8080-exec-95] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.158  INFO 4668 --- [io-8080-exec-81] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.158  INFO 4668 --- [o-8080-exec-175] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.158  INFO 4668 --- [o-8080-exec-163] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.158  INFO 4668 --- [o-8080-exec-112] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.158  INFO 4668 --- [o-8080-exec-187] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.158  INFO 4668 --- [o-8080-exec-168] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.158  INFO 4668 --- [io-8080-exec-25] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.159  INFO 4668 --- [o-8080-exec-124] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.159  INFO 4668 --- [o-8080-exec-119] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.159  INFO 4668 --- [io-8080-exec-75] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.159  INFO 4668 --- [io-8080-exec-29] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.159  INFO 4668 --- [io-8080-exec-59] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.159  INFO 4668 --- [o-8080-exec-105] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.159  INFO 4668 --- [io-8080-exec-50] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.159  INFO 4668 --- [io-8080-exec-19] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.159  INFO 4668 --- [o-8080-exec-158] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.159  INFO 4668 --- [o-8080-exec-127] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.159  INFO 4668 --- [o-8080-exec-167] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.159  INFO 4668 --- [io-8080-exec-77] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.159  INFO 4668 --- [o-8080-exec-181] m.j.controller.TestController            : 查询数据库2
+2022-11-05 14:20:07.159  INFO 4668 --- [o-8080-exec-176] m.j.controller.TestController            : 查询数据库2
+```
+
+
+
+自己实现的缓存被查询了很多次，对数据库的影响大
+
+
+
+
+
+
+
+
+
+
+
+## 测试缓存穿透
+
+
+
+### 第一步：修改TestController
+
+
+
+```java
+package mao.j2cache_demo.controller;
+
+import net.oschina.j2cache.CacheChannel;
+import net.oschina.j2cache.CacheObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * Project name(项目名称)：j2cache_demo
+ * Package(包名): mao.j2cache_demo.controller
+ * Class(类名): TestController
+ * Author(作者）: mao
+ * Author QQ：1296193245
+ * GitHub：https://github.com/maomao124/
+ * Date(创建日期)： 2022/11/5
+ * Time(创建时间)： 13:22
+ * Version(版本): 1.0
+ * Description(描述)： 无
+ */
+
+@RestController
+public class TestController
+{
+
+    private static final Logger log = LoggerFactory.getLogger(TestController.class);
+
+    @Autowired
+    private CacheChannel cacheChannel;
+
+    private final String key = "myKey";
+    private final String region = "rx";
+
+
+    @GetMapping("/getInfos")
+    public List<String> getInfos()
+    {
+        CacheObject cacheObject = cacheChannel.get(region, key);
+        if (cacheObject.getValue() == null)
+        {
+            log.info("查询数据库");
+            //缓存中没有找到，查询数据库获得
+            List<String> data = new ArrayList<>();
+            data.add("info1");
+            data.add("info2");
+            try
+            {
+                Thread.sleep(9);
+            }
+            catch (InterruptedException e)
+            {
+                e.printStackTrace();
+            }
+            //放入缓存
+            cacheChannel.set(region, key, data);
+            return data;
+        }
+        return (List<String>) cacheObject.getValue();
+    }
+
+    private String cache = null;
+
+    @GetMapping("/getInfos2")
+    public String getInfos2()
+    {
+        if (cache == null)
+        {
+            log.info("查询数据库2");
+            try
+            {
+                Thread.sleep(10);
+            }
+            catch (InterruptedException e)
+            {
+                e.printStackTrace();
+            }
+            cache = "hello";
+        }
+        else
+        {
+            return cache;
+        }
+        return cache;
+    }
+
+
+    @GetMapping("/getInfos3")
+    public List<String> getInfos3()
+    {
+        CacheObject cacheObject = cacheChannel.get(region, key);
+        if (cacheObject.getValue() == null)
+        {
+            log.info("查询数据库3");
+            //缓存中没有找到，查询数据库获得
+            try
+            {
+                Thread.sleep(9);
+            }
+            catch (InterruptedException e)
+            {
+                e.printStackTrace();
+            }
+            //放入缓存
+            cacheChannel.set(region, key, null);
+            return null;
+        }
+        return null;
+    }
+
+    /**
+     * 清理指定缓存
+     *
+     * @return {@link String}
+     */
+    @GetMapping("/evict")
+    public String evict()
+    {
+        cacheChannel.evict(region, key);
+        return "evict success";
+    }
+
+    /**
+     * 检测存在哪级缓存
+     *
+     * @return {@link String}
+     */
+    @GetMapping("/check")
+    public String check()
+    {
+        int check = cacheChannel.check(region, key);
+        return "level:" + check;
+    }
+
+    /**
+     * 检测缓存数据是否存在
+     *
+     * @return {@link String}
+     */
+    @GetMapping("/exists")
+    public String exists()
+    {
+        boolean exists = cacheChannel.exists(region, key);
+        return "exists:" + exists;
+    }
+
+    /**
+     * 清理指定区域的缓存
+     *
+     * @return {@link String}
+     */
+    @GetMapping("/clear")
+    public String clear()
+    {
+        cache = null;
+        cacheChannel.clear(region);
+        return "clear success";
+    }
+}
+```
+
+
+
+
+
+### 第二步：设置http请求
+
+
+
+![image-20221105143212018](img/j2cache学习笔记/image-20221105143212018.png)
+
+
+
+
+
+
+
+### 第三步：重启服务并启动jmeter
+
+
+
+![image-20221105143318659](img/j2cache学习笔记/image-20221105143318659.png)
+
+
+
+
+
+
+
+![image-20221105143335079](img/j2cache学习笔记/image-20221105143335079.png)
+
+
+
+
+
+
+
+所以，使用缓存要小心，缓存击穿、缓存雪崩和缓存穿透需要自己解决
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## 自定义spring boot starter
 
 
 
