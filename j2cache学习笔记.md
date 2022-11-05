@@ -2192,3 +2192,1484 @@ public class SpringUtil implements ApplicationContextAware
 
 }
 ```
+
+
+
+
+
+第八步：添加类ConfigureNotifyKeyspaceEventsAction
+
+
+
+```java
+package net.oschina.j2cache.cache.support.redis;
+
+import org.springframework.dao.InvalidDataAccessApiUsageException;
+import org.springframework.data.redis.connection.RedisConnection;
+
+import java.util.Properties;
+
+/**
+ * 设置redis键值回调
+ */
+public class ConfigureNotifyKeyspaceEventsAction
+{
+
+    /**
+     * 配置用于事件通知
+     */
+    static final String CONFIG_NOTIFY_KEYSPACE_EVENTS = "notify-keyspace-events";
+
+
+    /**
+     * 配置
+     *
+     * @param connection 连接
+     */
+    public void config(RedisConnection connection)
+    {
+        String notifyOptions = getNotifyOptions(connection);
+        String customizedNotifyOptions = notifyOptions;
+        if (!customizedNotifyOptions.contains("E"))
+        {
+            customizedNotifyOptions += "E";
+        }
+        boolean A = customizedNotifyOptions.contains("A");
+        if (!(A || customizedNotifyOptions.contains("g")))
+        {
+            customizedNotifyOptions += "g";
+        }
+        if (!(A || customizedNotifyOptions.contains("x")))
+        {
+            customizedNotifyOptions += "x";
+        }
+        if (!notifyOptions.equals(customizedNotifyOptions))
+        {
+            connection.setConfig(CONFIG_NOTIFY_KEYSPACE_EVENTS, customizedNotifyOptions);
+        }
+    }
+
+    /**
+     * 得到通知选项
+     *
+     * @param connection 连接
+     * @return {@link String}
+     */
+    private String getNotifyOptions(RedisConnection connection)
+    {
+        try
+        {
+            Properties config = connection.getConfig(CONFIG_NOTIFY_KEYSPACE_EVENTS);
+            if (config.isEmpty())
+            {
+                return "";
+            }
+            return config.getProperty(config.stringPropertyNames().iterator().next());
+        }
+        catch (InvalidDataAccessApiUsageException e)
+        {
+            throw new IllegalStateException(
+                    "Unable to configure Redis to keyspace notifications. See http://docs.spring.io/spring-session/docs/current/reference/html5/#api-redisoperationssessionrepository-sessiondestroyedevent",
+                    e);
+        }
+    }
+}
+```
+
+
+
+
+
+第九步：添加类SpringRedisActiveMessageListener
+
+
+
+```java
+package net.oschina.j2cache.cache.support.redis;
+
+import net.oschina.j2cache.cluster.ClusterPolicy;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.data.redis.connection.Message;
+import org.springframework.data.redis.connection.MessageListener;
+
+/**
+ * 监听二缓key失效，主动清除本地缓存
+ */
+public class SpringRedisActiveMessageListener implements MessageListener
+{
+
+    /**
+     * 日志记录器
+     */
+    private static Logger logger = LoggerFactory.getLogger(net.oschina.j2cache.cache.support.redis.SpringRedisActiveMessageListener.class);
+
+    /**
+     * 集群政策
+     */
+    private ClusterPolicy clusterPolicy;
+
+    /**
+     * 名称空间
+     */
+    private String namespace;
+
+    SpringRedisActiveMessageListener(ClusterPolicy clusterPolicy, String namespace)
+    {
+        this.clusterPolicy = clusterPolicy;
+        this.namespace = namespace;
+    }
+
+    @Override
+    public void onMessage(Message message, byte[] pattern)
+    {
+        String key = message.toString();
+        if (key == null)
+        {
+            return;
+        }
+        if (key.startsWith(namespace + ":"))
+        {
+            String[] k = key.replaceFirst(namespace + ":", "").split(":", 2);
+            if (k.length != 2)
+            {
+                return;
+            }
+            clusterPolicy.evict(k[0], k[1]);
+        }
+
+    }
+
+}
+```
+
+
+
+
+
+第十步：添加类SpringRedisCache
+
+
+
+```java
+package net.oschina.j2cache.cache.support.redis;
+
+import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import net.oschina.j2cache.Level2Cache;
+import org.springframework.data.redis.core.RedisCallback;
+import org.springframework.data.redis.core.RedisTemplate;
+
+/**
+ * 重新实现二级缓存，采用hash结构缓存数据
+ */
+public class SpringRedisCache implements Level2Cache
+{
+
+    /**
+     * 名称空间
+     */
+    private String namespace;
+
+    /**
+     * 地区
+     */
+    private String region;
+
+    private RedisTemplate<String, Serializable> redisTemplate;
+
+    public SpringRedisCache(String namespace, String region, RedisTemplate<String, Serializable> redisTemplate)
+    {
+        if (region == null || region.isEmpty())
+        {
+            region = "_"; // 缺省region
+        }
+        this.namespace = namespace;
+        this.redisTemplate = redisTemplate;
+        this.region = getRegionName(region);
+    }
+
+    private String getRegionName(String region)
+    {
+        if (namespace != null && !namespace.isEmpty())
+        {
+            region = namespace + ":" + region;
+        }
+        return region;
+    }
+
+    @Override
+    public void clear()
+    {
+        redisTemplate.opsForHash().delete(region);
+    }
+
+    @Override
+    public boolean exists(String key)
+    {
+        return redisTemplate.opsForHash().hasKey(region, key);
+    }
+
+    @Override
+    public void evict(String... keys)
+    {
+        for (String k : keys)
+        {
+            if (!k.equals("null"))
+            {
+                redisTemplate.opsForHash().delete(region, k);
+            }
+            else
+            {
+                redisTemplate.delete(region);
+            }
+        }
+    }
+
+    @Override
+    public Collection<String> keys()
+    {
+        Set<Object> list = redisTemplate.opsForHash().keys(region);
+        List<String> keys = new ArrayList<>(list.size());
+        for (Object object : list)
+        {
+            keys.add((String) object);
+        }
+        return keys;
+    }
+
+    @Override
+    public byte[] getBytes(String key)
+    {
+        return redisTemplate.opsForHash().getOperations().execute((RedisCallback<byte[]>) redis ->
+                redis.hGet(region.getBytes(), key.getBytes()));
+    }
+
+    @Override
+    public List<byte[]> getBytes(Collection<String> keys)
+    {
+        return redisTemplate.opsForHash().getOperations().execute((RedisCallback<List<byte[]>>) redis ->
+        {
+            byte[][] bytes = keys.stream().map(k -> k.getBytes()).toArray(byte[][]::new);
+            return redis.hMGet(region.getBytes(), bytes);
+        });
+    }
+
+    @Override
+    public void put(String key, Object value)
+    {
+        redisTemplate.opsForHash().put(region, key, value);
+    }
+
+    /**
+     * 设置缓存数据的有效期
+     */
+    @Override
+    public void put(String key, Object value, long timeToLiveInSeconds)
+    {
+        redisTemplate.opsForHash().put(region, key, value);
+    }
+
+    @Override
+    public void setBytes(String key, byte[] bytes)
+    {
+        redisTemplate.opsForHash().getOperations().execute((RedisCallback<List<byte[]>>) redis ->
+        {
+            redis.set(_key(key).getBytes(), bytes);
+            redis.hSet(region.getBytes(), key.getBytes(), bytes);
+            return null;
+        });
+    }
+
+    @Override
+    public void setBytes(Map<String, byte[]> bytes)
+    {
+        bytes.forEach((k, v) ->
+        {
+            setBytes(k, v);
+        });
+    }
+
+    private String _key(String key)
+    {
+        return this.region + ":" + key;
+    }
+
+}
+```
+
+
+
+
+
+第十一步：添加类SpringRedisGenericCache
+
+
+
+```java
+package net.oschina.j2cache.cache.support.redis;
+
+import java.io.Serializable;
+import java.io.UnsupportedEncodingException;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+import net.oschina.j2cache.Level2Cache;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.data.redis.core.RedisCallback;
+import org.springframework.data.redis.core.RedisTemplate;
+
+public class SpringRedisGenericCache implements Level2Cache
+{
+
+    /**
+     * 日志
+     */
+    private final static Logger log = LoggerFactory.getLogger(net.oschina.j2cache.cache.support.redis.SpringRedisGenericCache.class);
+
+    /**
+     * 名称空间
+     */
+    private String namespace;
+
+    private String region;
+
+    private RedisTemplate<String, Serializable> redisTemplate;
+
+    public SpringRedisGenericCache(String namespace, String region, RedisTemplate<String, Serializable> redisTemplate)
+    {
+        if (region == null || region.isEmpty())
+        {
+            region = "_"; // 缺省region
+        }
+        this.namespace = namespace;
+        this.redisTemplate = redisTemplate;
+        this.region = getRegionName(region);
+    }
+
+    private String getRegionName(String region)
+    {
+        if (namespace != null && !namespace.isEmpty())
+        {
+            region = namespace + ":" + region;
+        }
+        return region;
+    }
+
+    @Override
+    public void clear()
+    {
+        Collection<String> keys = keys();
+        keys.stream().forEach(k ->
+        {
+            redisTemplate.delete(this.region + ":" + k);
+        });
+    }
+
+    @Override
+    public boolean exists(String key)
+    {
+        return redisTemplate.execute((RedisCallback<Boolean>) redis ->
+        {
+            return redis.exists(_key(key));
+        });
+    }
+
+    @Override
+    public void evict(String... keys)
+    {
+        for (String k : keys)
+        {
+            redisTemplate.execute((RedisCallback<Long>) redis ->
+            {
+                return redis.del(_key(k));
+            });
+        }
+    }
+
+    @Override
+    public Collection<String> keys()
+    {
+        return redisTemplate.keys(this.region + ":*").stream().map(k ->
+                k.substring(this.region.length() + 1)).collect(Collectors.toSet());
+    }
+
+    @Override
+    public byte[] getBytes(String key)
+    {
+        return redisTemplate.execute((RedisCallback<byte[]>) redis ->
+        {
+            return redis.get(_key(key));
+        });
+    }
+
+    @Override
+    public List<byte[]> getBytes(Collection<String> keys)
+    {
+        return redisTemplate.execute((RedisCallback<List<byte[]>>) redis ->
+        {
+            byte[][] bytes = keys.stream().map(k -> _key(k)).toArray(byte[][]::new);
+            return redis.mGet(bytes);
+        });
+    }
+
+    @Override
+    public void setBytes(String key, byte[] bytes, long timeToLiveInSeconds)
+    {
+        if (timeToLiveInSeconds <= 0)
+        {
+            log.debug(String.format("Invalid timeToLiveInSeconds value : %d , skipped it.", timeToLiveInSeconds));
+            setBytes(key, bytes);
+        }
+        else
+        {
+            redisTemplate.execute((RedisCallback<List<byte[]>>) redis ->
+            {
+                redis.setEx(_key(key), (int) timeToLiveInSeconds, bytes);
+                return null;
+            });
+        }
+    }
+
+    @Override
+    public void setBytes(Map<String, byte[]> bytes, long timeToLiveInSeconds)
+    {
+        bytes.forEach((k, v) -> setBytes(k, v, timeToLiveInSeconds));
+    }
+
+    @Override
+    public void setBytes(String key, byte[] bytes)
+    {
+        redisTemplate.execute((RedisCallback<byte[]>) redis ->
+        {
+            redis.set(_key(key), bytes);
+            return null;
+        });
+    }
+
+    @Override
+    public void setBytes(Map<String, byte[]> bytes)
+    {
+        bytes.forEach((k, v) -> setBytes(k, v));
+    }
+
+    private byte[] _key(String key)
+    {
+        byte[] k;
+        try
+        {
+            k = (this.region + ":" + key).getBytes("utf-8");
+        }
+        catch (UnsupportedEncodingException e)
+        {
+            e.printStackTrace();
+            k = (this.region + ":" + key).getBytes();
+        }
+        return k;
+    }
+}
+```
+
+
+
+
+
+第十二步：添加类SpringRedisMessageListener
+
+
+
+```java
+package net.oschina.j2cache.cache.support.redis;
+
+import net.oschina.j2cache.Command;
+import net.oschina.j2cache.cluster.ClusterPolicy;
+import net.oschina.j2cache.util.SerializationUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.data.redis.connection.Message;
+import org.springframework.data.redis.connection.MessageListener;
+
+/**
+ * spring redis 订阅消息监听
+ */
+public class SpringRedisMessageListener implements MessageListener
+{
+
+    /**
+     * 日志记录器
+     */
+    private static Logger logger = LoggerFactory.getLogger(net.oschina.j2cache.cache.support.redis.SpringRedisMessageListener.class);
+    /**
+     * 当地命令id
+     */
+    private int LOCAL_COMMAND_ID = Command.genRandomSrc(); //命令源标识，随机生成，每个节点都有唯一标识
+
+    /**
+     * 集群政策
+     */
+    private ClusterPolicy clusterPolicy;
+
+    /**
+     * 通道
+     */
+    private String channel;
+
+    SpringRedisMessageListener(ClusterPolicy clusterPolicy, String channel)
+    {
+        this.clusterPolicy = clusterPolicy;
+        this.channel = channel;
+    }
+
+    private boolean isLocalCommand(Command cmd)
+    {
+        return cmd.getSrc() == LOCAL_COMMAND_ID;
+    }
+
+    @Override
+    public void onMessage(Message message, byte[] pattern)
+    {
+        byte[] messageChannel = message.getChannel();
+        byte[] messageBody = message.getBody();
+        if (messageChannel == null || messageBody == null)
+        {
+            return;
+        }
+        try
+        {
+            Command cmd = Command.parse(String.valueOf(SerializationUtils.deserialize(messageBody)));
+            if (cmd == null || isLocalCommand(cmd))
+            {
+                return;
+            }
+
+            switch (cmd.getOperator())
+            {
+                case Command.OPT_JOIN:
+                    logger.info("Node-" + cmd.getSrc() + " joined to " + this.channel);
+                    break;
+                case Command.OPT_EVICT_KEY:
+                    clusterPolicy.evict(cmd.getRegion(), cmd.getKeys());
+                    logger.debug("Received cache evict message, region=" + cmd.getRegion() + ",key=" + String.join(",", cmd.getKeys()));
+                    break;
+                case Command.OPT_CLEAR_KEY:
+                    clusterPolicy.clear(cmd.getRegion());
+                    logger.debug("Received cache clear message, region=" + cmd.getRegion());
+                    break;
+                case Command.OPT_QUIT:
+                    logger.info("Node-" + cmd.getSrc() + " quit to " + this.channel);
+                    break;
+                default:
+                    logger.warn("Unknown message type = " + cmd.getOperator());
+            }
+        }
+        catch (Exception e)
+        {
+            logger.error("Failed to handle received msg", e);
+        }
+    }
+
+}
+```
+
+
+
+
+
+第十三步：添加类SpringRedisProvider
+
+
+
+```java
+package net.oschina.j2cache.cache.support.redis;
+
+import java.io.Serializable;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Properties;
+import java.util.concurrent.ConcurrentHashMap;
+
+import net.oschina.j2cache.Cache;
+import net.oschina.j2cache.CacheChannel;
+import net.oschina.j2cache.CacheExpiredListener;
+import net.oschina.j2cache.CacheObject;
+import net.oschina.j2cache.CacheProvider;
+import net.oschina.j2cache.NullCache;
+import net.oschina.j2cache.cache.support.util.SpringUtil;
+import org.springframework.data.redis.core.RedisTemplate;
+
+/**
+ * spring redis缓存
+ */
+public class SpringRedisProvider implements CacheProvider
+{
+
+    /**
+     * 缓存
+     */
+    protected ConcurrentHashMap<String, Cache> caches = new ConcurrentHashMap<>();
+    private RedisTemplate<String, Serializable> redisTemplate;
+    /**
+     * 配置
+     */
+    private net.oschina.j2cache.autoconfigure.J2CacheConfig config;
+    /**
+     * 名称空间
+     */
+    private String namespace;
+    /**
+     * 存储
+     */
+    private String storage;
+
+    @Override
+    public String name()
+    {
+        return "redis";
+    }
+
+    @Override
+    public int level()
+    {
+        return CacheObject.LEVEL_2;
+    }
+
+    @Override
+    public Collection<CacheChannel.Region> regions()
+    {
+        return Collections.emptyList();
+    }
+
+    /**
+     * 建立缓存
+     *
+     * @param region   地区
+     * @param listener 侦听器
+     * @return {@link Cache}
+     */
+    @Override
+    public Cache buildCache(String region, CacheExpiredListener listener)
+    {
+        if (config.getL2CacheOpen() == false)
+        {
+            return new NullCache();
+        }
+        Cache cache = caches.get(region);
+        if (cache == null)
+        {
+            synchronized (net.oschina.j2cache.cache.support.redis.SpringRedisProvider.class)
+            {
+                cache = caches.get(region);
+                if (cache == null)
+                {
+                    if ("hash".equalsIgnoreCase(this.storage))
+                    {
+                        cache = new SpringRedisCache(this.namespace, region, redisTemplate);
+                    }
+                    else
+                    {
+                        cache = new SpringRedisGenericCache(this.namespace, region, redisTemplate);
+                    }
+                    caches.put(region, cache);
+                }
+            }
+        }
+        return cache;
+    }
+
+    @Override
+    public Cache buildCache(String region, long timeToLiveInSeconds, CacheExpiredListener listener)
+    {
+        return buildCache(region, listener);
+    }
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public void start(Properties props)
+    {
+        this.namespace = props.getProperty("namespace");
+        this.storage = props.getProperty("storage");
+        this.config = SpringUtil.getBean(net.oschina.j2cache.autoconfigure.J2CacheConfig.class);
+        if (config.getL2CacheOpen() == false)
+        {
+            return;
+        }
+        this.redisTemplate = SpringUtil.getBean("j2CacheRedisTemplate", RedisTemplate.class);
+    }
+
+    @Override
+    public void stop()
+    {
+        // 由spring控制
+    }
+
+}
+```
+
+
+
+
+
+第十四步：添加类SpringRedisPubSubPolicy
+
+
+
+```java
+package net.oschina.j2cache.cache.support.redis;
+
+import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Properties;
+
+import net.oschina.j2cache.CacheProviderHolder;
+import net.oschina.j2cache.Command;
+import net.oschina.j2cache.J2CacheConfig;
+import net.oschina.j2cache.cache.support.util.SpringUtil;
+import net.oschina.j2cache.cluster.ClusterPolicy;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.listener.PatternTopic;
+import org.springframework.data.redis.listener.RedisMessageListenerContainer;
+
+/**
+ * 使用spring redis实现订阅功能
+ */
+public class SpringRedisPubSubPolicy implements ClusterPolicy
+{
+
+    /**
+     * 是否是主动模式
+     */
+    private static boolean isActive = false;
+    private int LOCAL_COMMAND_ID = Command.genRandomSrc(); //命令源标识，随机生成，每个节点都有唯一标识
+    private RedisTemplate<String, Serializable> redisTemplate;
+    private net.oschina.j2cache.autoconfigure.J2CacheConfig config;
+    private CacheProviderHolder holder;
+    private String channel = "j2cache_channel";
+
+    @Override
+    public boolean isLocalCommand(Command cmd)
+    {
+        return cmd.getSrc() == LOCAL_COMMAND_ID;
+    }
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public void connect(Properties props, CacheProviderHolder holder)
+    {
+        this.holder = holder;
+        this.config = SpringUtil.getBean(net.oschina.j2cache.autoconfigure.J2CacheConfig.class);
+        if (config.getL2CacheOpen() == false)
+        {
+            return;
+        }
+        J2CacheConfig j2config = SpringUtil.getBean(J2CacheConfig.class);
+        this.redisTemplate = SpringUtil.getBean("j2CacheRedisTemplate", RedisTemplate.class);
+        String channel_name = j2config.getL2CacheProperties().getProperty("channel");
+        if (channel_name != null && !channel_name.isEmpty())
+        {
+            this.channel = channel_name;
+        }
+        RedisMessageListenerContainer listenerContainer = SpringUtil.getBean("j2CacheRedisMessageListenerContainer", RedisMessageListenerContainer.class);
+        String namespace = j2config.getL2CacheProperties().getProperty("namespace");
+        String database = j2config.getL2CacheProperties().getProperty("database");
+        String expired = "__keyevent@" + (database == null || "".equals(database) ? "0" : database) + "__:expired";
+        String del = "__keyevent@" + (database == null || "".equals(database) ? "0" : database) + "__:del";
+        List<PatternTopic> topics = new ArrayList<>();
+        topics.add(new PatternTopic(expired));
+        topics.add(new PatternTopic(del));
+
+        if ("active".equals(config.getCacheCleanMode()))
+        {
+            isActive = true;
+            //设置键值回调 需要redis支持键值回调
+            ConfigureNotifyKeyspaceEventsAction action = new ConfigureNotifyKeyspaceEventsAction();
+            action.config(listenerContainer.getConnectionFactory().getConnection());
+            listenerContainer.addMessageListener(new SpringRedisActiveMessageListener(this, namespace), topics);
+        }
+        else if ("blend".equals(config.getCacheCleanMode()))
+        {
+            //设置键值回调 需要redis支持键值回调
+            ConfigureNotifyKeyspaceEventsAction action = new ConfigureNotifyKeyspaceEventsAction();
+            action.config(listenerContainer.getConnectionFactory().getConnection());
+            listenerContainer.addMessageListener(new SpringRedisActiveMessageListener(this, namespace), topics);
+            listenerContainer.addMessageListener(new SpringRedisMessageListener(this, this.channel), new PatternTopic(this.channel));
+        }
+        else
+        {
+            listenerContainer.addMessageListener(new SpringRedisMessageListener(this, this.channel), new PatternTopic(this.channel));
+        }
+
+    }
+
+    /**
+     * 删除本地某个缓存条目
+     *
+     * @param region 区域名称
+     * @param keys   缓存键值
+     */
+    public void evict(String region, String... keys)
+    {
+        holder.getLevel1Cache(region).evict(keys);
+    }
+
+    /**
+     * 清除本地整个缓存区域
+     *
+     * @param region 区域名称
+     */
+    public void clear(String region)
+    {
+        holder.getLevel1Cache(region).clear();
+    }
+
+    /**
+     * 发布
+     *
+     * @param cmd cmd
+     */
+    @Override
+    public void publish(Command cmd)
+    {
+        if (!isActive && config.getL2CacheOpen())
+        {
+            cmd.setSrc(LOCAL_COMMAND_ID);
+            redisTemplate.convertAndSend(this.channel, cmd.json());
+        }
+    }
+
+    /**
+     * 断开连接
+     */
+    @Override
+    public void disconnect()
+    {
+        if (!isActive && config.getL2CacheOpen())
+        {
+            Command cmd = new Command();
+            cmd.setSrc(LOCAL_COMMAND_ID);
+            cmd.setOperator(Command.OPT_QUIT);
+            redisTemplate.convertAndSend(this.channel, cmd.json());
+        }
+    }
+
+}
+```
+
+
+
+
+
+第十五步：添加配置类J2CacheAutoConfiguration
+
+
+
+```java
+package net.oschina.j2cache.autoconfigure;
+
+import net.oschina.j2cache.CacheChannel;
+import net.oschina.j2cache.J2Cache;
+import net.oschina.j2cache.J2CacheBuilder;
+import net.oschina.j2cache.cache.support.util.SpringJ2CacheConfigUtil;
+import net.oschina.j2cache.cache.support.util.SpringUtil;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.DependsOn;
+import org.springframework.context.annotation.PropertySource;
+import org.springframework.core.env.StandardEnvironment;
+
+import java.io.IOException;
+
+/**
+ * 启动入口
+ */
+@ConditionalOnClass(J2Cache.class)
+@EnableConfigurationProperties({J2CacheConfig.class})
+@Configuration
+@PropertySource(value = "${j2cache.config-location}", encoding = "UTF-8", ignoreResourceNotFound = true)
+public class J2CacheAutoConfiguration
+{
+
+    @Autowired
+    private StandardEnvironment standardEnvironment;
+
+    @Bean
+    public net.oschina.j2cache.J2CacheConfig j2CacheConfig() throws IOException
+    {
+        net.oschina.j2cache.J2CacheConfig cacheConfig = SpringJ2CacheConfigUtil.initFromConfig(standardEnvironment);
+        return cacheConfig;
+    }
+
+    @Bean
+    @DependsOn({"springUtil", "j2CacheConfig"})
+    public CacheChannel cacheChannel(net.oschina.j2cache.J2CacheConfig j2CacheConfig) throws IOException
+    {
+        J2CacheBuilder builder = J2CacheBuilder.init(j2CacheConfig);
+        return builder.getChannel();
+    }
+
+    @Bean
+    public SpringUtil springUtil()
+    {
+        return new SpringUtil();
+    }
+
+}
+```
+
+
+
+
+
+第十六步：添加配置属性类J2CacheConfig
+
+
+
+```java
+package net.oschina.j2cache.autoconfigure;
+
+import org.springframework.boot.context.properties.ConfigurationProperties;
+
+/**
+ * 相关的配置信息
+ */
+@ConfigurationProperties(prefix = "j2cache")
+public class J2CacheConfig
+{
+    private String configLocation = "/j2cache.properties";
+
+    /**
+     * 是否开启spring cache缓存,注意:开启后需要添加spring.cache.type=GENERIC,将缓存类型设置为GENERIC
+     */
+    private Boolean openSpringCache = false;
+
+    /**
+     * 缓存清除模式，
+     * <ul>
+     * <li>active:主动清除，二级缓存过期主动通知各节点清除，优点在于所有节点可以同时收到缓存清除</li>
+     * <li>passive:被动清除，一级缓存过期进行通知各节点清除一二级缓存，</li>
+     * <li> blend:两种模式一起运作，对于各个节点缓存准确以及及时性要求高的可以使用，正常用前两种模式中一个就可</li>
+     * </ul>
+     */
+    private String cacheCleanMode = "passive";
+
+    /**
+     * 是否允许缓存空值,默认:false
+     */
+    private boolean allowNullValues = false;
+
+    /**
+     * 使用哪种redis客户端,默认：jedis
+     * <ul>
+     * <li><a href ='https://github.com/xetorthio/jedis'>jedis: https://github.com/xetorthio/jedis</a></li>
+     * <li><a href ='https://github.com/lettuce-io/lettuce-core'>lettuce: https://github.com/lettuce-io/lettuce-core</a></li>
+     * </ul>
+     */
+    private String redisClient = "jedis";
+
+    /**
+     * 是否开启二级缓存
+     */
+    private boolean l2CacheOpen = true;
+
+
+    public String getConfigLocation()
+    {
+        return configLocation;
+    }
+
+    public void setConfigLocation(String configLocation)
+    {
+        this.configLocation = configLocation;
+    }
+
+    public Boolean getOpenSpringCache()
+    {
+        return openSpringCache;
+    }
+
+    public void setOpenSpringCache(Boolean openSpringCache)
+    {
+        this.openSpringCache = openSpringCache;
+    }
+
+    public String getCacheCleanMode()
+    {
+        return cacheCleanMode;
+    }
+
+    public void setCacheCleanMode(String cacheCleanMode)
+    {
+        this.cacheCleanMode = cacheCleanMode;
+    }
+
+    public boolean isAllowNullValues()
+    {
+        return allowNullValues;
+    }
+
+    public void setAllowNullValues(boolean allowNullValues)
+    {
+        this.allowNullValues = allowNullValues;
+    }
+
+    public String getRedisClient()
+    {
+        return redisClient;
+    }
+
+    public void setRedisClient(String redisClient)
+    {
+        this.redisClient = redisClient;
+    }
+
+    public boolean getL2CacheOpen()
+    {
+        return l2CacheOpen;
+    }
+
+    public void setL2CacheOpen(boolean l2CacheOpen)
+    {
+        this.l2CacheOpen = l2CacheOpen;
+    }
+
+}
+```
+
+
+
+
+
+第十七步：添加配置类J2CacheSpringCacheAutoConfiguration
+
+
+
+```java
+package net.oschina.j2cache.autoconfigure;
+
+import net.oschina.j2cache.CacheChannel;
+import net.oschina.j2cache.J2Cache;
+import net.oschina.j2cache.cache.support.J2CacheCacheManger;
+import org.springframework.boot.autoconfigure.cache.CacheProperties;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.cache.annotation.EnableCaching;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+import java.util.List;
+
+/**
+ * 开启对spring cache支持的配置入口
+ */
+@Configuration
+@ConditionalOnClass(J2Cache.class)
+@EnableConfigurationProperties({J2CacheConfig.class, CacheProperties.class})
+@ConditionalOnProperty(name = "j2cache.open-spring-cache", havingValue = "true")
+@EnableCaching
+public class J2CacheSpringCacheAutoConfiguration
+{
+
+    private final CacheProperties cacheProperties;
+
+    private final J2CacheConfig j2CacheConfig;
+
+    J2CacheSpringCacheAutoConfiguration(CacheProperties cacheProperties, J2CacheConfig j2CacheConfig)
+    {
+        this.cacheProperties = cacheProperties;
+        this.j2CacheConfig = j2CacheConfig;
+    }
+
+    @Bean
+    @ConditionalOnBean(CacheChannel.class)
+    public J2CacheCacheManger cacheManager(CacheChannel cacheChannel)
+    {
+        List<String> cacheNames = cacheProperties.getCacheNames();
+        J2CacheCacheManger cacheCacheManger = new J2CacheCacheManger(cacheChannel);
+        cacheCacheManger.setAllowNullValues(j2CacheConfig.isAllowNullValues());
+        cacheCacheManger.setCacheNames(cacheNames);
+        return cacheCacheManger;
+    }
+
+
+}
+```
+
+
+
+
+
+第十八步：添加配置类J2CacheSpringRedisAutoConfiguration
+
+
+
+```java
+package net.oschina.j2cache.autoconfigure;
+
+import java.io.Serializable;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Properties;
+
+import net.oschina.j2cache.cache.support.util.J2CacheSerializer;
+import net.oschina.j2cache.redis.RedisUtils;
+import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.autoconfigure.AutoConfigureAfter;
+import org.springframework.boot.autoconfigure.AutoConfigureBefore;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
+import org.springframework.data.redis.connection.RedisClusterConfiguration;
+import org.springframework.data.redis.connection.RedisConnectionFactory;
+import org.springframework.data.redis.connection.RedisNode;
+import org.springframework.data.redis.connection.RedisPassword;
+import org.springframework.data.redis.connection.RedisSentinelConfiguration;
+import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
+import org.springframework.data.redis.connection.jedis.JedisClientConfiguration;
+import org.springframework.data.redis.connection.jedis.JedisClientConfiguration.JedisClientConfigurationBuilder;
+import org.springframework.data.redis.connection.jedis.JedisConnectionFactory;
+import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
+import org.springframework.data.redis.connection.lettuce.LettucePoolingClientConfiguration;
+import org.springframework.data.redis.connection.lettuce.LettucePoolingClientConfiguration.LettucePoolingClientConfigurationBuilder;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.listener.RedisMessageListenerContainer;
+import org.springframework.data.redis.serializer.RedisSerializer;
+import org.springframework.data.redis.serializer.StringRedisSerializer;
+import org.springframework.util.StringUtils;
+import redis.clients.jedis.JedisPoolConfig;
+import redis.clients.jedis.JedisShardInfo;
+import redis.clients.jedis.exceptions.JedisConnectionException;
+
+/**
+ * 对spring redis支持的配置入口
+ */
+@Configuration
+@AutoConfigureAfter({RedisAutoConfiguration.class})
+@AutoConfigureBefore({J2CacheAutoConfiguration.class})
+@ConditionalOnProperty(value = "j2cache.l2-cache-open", havingValue = "true", matchIfMissing = true)
+public class J2CacheSpringRedisAutoConfiguration
+{
+
+    private final static int MAX_ATTEMPTS = 3;
+
+    private final static int CONNECT_TIMEOUT = 5000;
+
+    private static final Logger log = LoggerFactory.getLogger(net.oschina.j2cache.autoconfigure.J2CacheSpringRedisAutoConfiguration.class);
+
+    @SuppressWarnings("deprecation")
+    @Bean("j2CahceRedisConnectionFactory")
+    @ConditionalOnMissingBean(name = "j2CahceRedisConnectionFactory")
+    @ConditionalOnProperty(name = "j2cache.redis-client", havingValue = "jedis", matchIfMissing = true)
+    public JedisConnectionFactory jedisConnectionFactory(net.oschina.j2cache.J2CacheConfig j2CacheConfig)
+    {
+        Properties l2CacheProperties = j2CacheConfig.getL2CacheProperties();
+        String hosts = l2CacheProperties.getProperty("hosts");
+        String mode = l2CacheProperties.getProperty("mode") == null ? "null" : l2CacheProperties.getProperty("mode");
+        String clusterName = l2CacheProperties.getProperty("cluster_name");
+        String password = l2CacheProperties.getProperty("password");
+        int database = l2CacheProperties.getProperty("database") == null ? 0
+                : Integer.parseInt(l2CacheProperties.getProperty("database"));
+        JedisConnectionFactory connectionFactory = null;
+        JedisPoolConfig config = RedisUtils.newPoolConfig(l2CacheProperties, null);
+        List<RedisNode> nodes = new ArrayList<>();
+        if (hosts != null && !"".equals(hosts))
+        {
+            for (String node : hosts.split(","))
+            {
+                String[] s = node.split(":");
+                String host = s[0];
+                int port = (s.length > 1) ? Integer.parseInt(s[1]) : 6379;
+                RedisNode n = new RedisNode(host, port);
+                nodes.add(n);
+            }
+        }
+        else
+        {
+            log.error("j2cache中的redis配置缺少hosts！！");
+            throw new IllegalArgumentException("j2cache中的redis配置缺少hosts");
+        }
+
+        RedisPassword paw = RedisPassword.none();
+        if (!StringUtils.isEmpty(password))
+        {
+            paw = RedisPassword.of(password);
+        }
+
+        switch (mode)
+        {
+            case "sentinel":
+                RedisSentinelConfiguration sentinel = new RedisSentinelConfiguration();
+                sentinel.setDatabase(database);
+                sentinel.setPassword(paw);
+                sentinel.setMaster(clusterName);
+                sentinel.setSentinels(nodes);
+                connectionFactory = new JedisConnectionFactory(sentinel, config);
+                break;
+            case "cluster":
+                RedisClusterConfiguration cluster = new RedisClusterConfiguration();
+                cluster.setClusterNodes(nodes);
+                cluster.setMaxRedirects(MAX_ATTEMPTS);
+                cluster.setPassword(paw);
+                connectionFactory = new JedisConnectionFactory(cluster, config);
+                break;
+            case "sharded":
+                try
+                {
+                    for (String node : hosts.split(","))
+                    {
+                        connectionFactory = new JedisConnectionFactory(new JedisShardInfo(new URI(node)));
+                        connectionFactory.setPoolConfig(config);
+                        log.warn("Jedis mode [sharded] not recommended for use!!");
+                        break;
+                    }
+                }
+                catch (URISyntaxException e)
+                {
+                    throw new JedisConnectionException(e);
+                }
+                break;
+            default:
+                for (RedisNode node : nodes)
+                {
+                    String host = node.getHost();
+                    int port = node.getPort();
+                    RedisStandaloneConfiguration single = new RedisStandaloneConfiguration(host, port);
+                    single.setDatabase(database);
+                    single.setPassword(paw);
+                    JedisClientConfigurationBuilder clientConfiguration = JedisClientConfiguration.builder();
+                    clientConfiguration.usePooling().poolConfig(config);
+                    clientConfiguration.connectTimeout(Duration.ofMillis(CONNECT_TIMEOUT));
+                    connectionFactory = new JedisConnectionFactory(single, clientConfiguration.build());
+                    break;
+                }
+                if (!"single".equalsIgnoreCase(mode))
+                {
+                    log.warn("Redis mode [" + mode + "] not defined. Using 'single'.");
+                }
+                break;
+        }
+        return connectionFactory;
+    }
+
+    @Primary
+    @Bean("j2CahceRedisConnectionFactory")
+    @ConditionalOnMissingBean(name = "j2CahceRedisConnectionFactory")
+    @ConditionalOnProperty(name = "j2cache.redis-client", havingValue = "lettuce")
+    public LettuceConnectionFactory lettuceConnectionFactory(net.oschina.j2cache.J2CacheConfig j2CacheConfig)
+    {
+        Properties l2CacheProperties = j2CacheConfig.getL2CacheProperties();
+        String hosts = l2CacheProperties.getProperty("hosts");
+        String mode = l2CacheProperties.getProperty("mode") == null ? "null" : l2CacheProperties.getProperty("mode");
+        String clusterName = l2CacheProperties.getProperty("cluster_name");
+        String password = l2CacheProperties.getProperty("password");
+        int database = l2CacheProperties.getProperty("database") == null ? 0
+                : Integer.parseInt(l2CacheProperties.getProperty("database"));
+        LettuceConnectionFactory connectionFactory = null;
+        LettucePoolingClientConfigurationBuilder config = LettucePoolingClientConfiguration.builder();
+        config.commandTimeout(Duration.ofMillis(CONNECT_TIMEOUT));
+        config.poolConfig(getGenericRedisPool(l2CacheProperties, null));
+        List<RedisNode> nodes = new ArrayList<>();
+        if (hosts != null && !"".equals(hosts))
+        {
+            for (String node : hosts.split(","))
+            {
+                String[] s = node.split(":");
+                String host = s[0];
+                int port = (s.length > 1) ? Integer.parseInt(s[1]) : 6379;
+                RedisNode n = new RedisNode(host, port);
+                nodes.add(n);
+            }
+        }
+        else
+        {
+            log.error("j2cache中的redis配置缺少hosts！！");
+            throw new IllegalArgumentException();
+        }
+        RedisPassword paw = RedisPassword.none();
+        if (!StringUtils.isEmpty(password))
+        {
+            paw = RedisPassword.of(password);
+        }
+        switch (mode)
+        {
+            case "sentinel":
+                RedisSentinelConfiguration sentinel = new RedisSentinelConfiguration();
+                sentinel.setDatabase(database);
+                sentinel.setPassword(paw);
+                sentinel.setMaster(clusterName);
+                sentinel.setSentinels(nodes);
+                connectionFactory = new LettuceConnectionFactory(sentinel, config.build());
+                break;
+            case "cluster":
+                RedisClusterConfiguration cluster = new RedisClusterConfiguration();
+                cluster.setClusterNodes(nodes);
+                cluster.setMaxRedirects(MAX_ATTEMPTS);
+                cluster.setPassword(paw);
+                connectionFactory = new LettuceConnectionFactory(cluster, config.build());
+                break;
+            case "sharded":
+                throw new IllegalArgumentException("Lettuce not support use mode [sharded]!!");
+            default:
+                for (RedisNode node : nodes)
+                {
+                    String host = node.getHost();
+                    int port = node.getPort();
+                    RedisStandaloneConfiguration single = new RedisStandaloneConfiguration(host, port);
+                    single.setDatabase(database);
+                    single.setPassword(paw);
+                    connectionFactory = new LettuceConnectionFactory(single, config.build());
+                    break;
+                }
+                if (!"single".equalsIgnoreCase(mode))
+                {
+                    log.warn("Redis mode [" + mode + "] not defined. Using 'single'.");
+                }
+                break;
+        }
+        return connectionFactory;
+    }
+
+    @Bean("j2CacheRedisTemplate")
+    public RedisTemplate<String, Serializable> j2CacheRedisTemplate(
+            @Qualifier("j2CahceRedisConnectionFactory") RedisConnectionFactory j2CahceRedisConnectionFactory,
+            @Qualifier("j2CacheValueSerializer") RedisSerializer<Object> j2CacheSerializer)
+    {
+        RedisTemplate<String, Serializable> template = new RedisTemplate<String, Serializable>();
+        template.setKeySerializer(new StringRedisSerializer());
+        template.setHashKeySerializer(new StringRedisSerializer());
+        template.setDefaultSerializer(j2CacheSerializer);
+        template.setConnectionFactory(j2CahceRedisConnectionFactory);
+        return template;
+    }
+
+    @Bean("j2CacheValueSerializer")
+    @ConditionalOnMissingBean(name = "j2CacheValueSerializer")
+    public RedisSerializer<Object> j2CacheValueSerializer()
+    {
+        return new J2CacheSerializer();
+    }
+
+    @Bean("j2CacheRedisMessageListenerContainer")
+    RedisMessageListenerContainer container(
+            @Qualifier("j2CahceRedisConnectionFactory") RedisConnectionFactory j2CahceRedisConnectionFactory)
+    {
+        RedisMessageListenerContainer container = new RedisMessageListenerContainer();
+        container.setConnectionFactory(j2CahceRedisConnectionFactory);
+        return container;
+    }
+
+    private GenericObjectPoolConfig getGenericRedisPool(Properties props, String prefix)
+    {
+        GenericObjectPoolConfig cfg = new GenericObjectPoolConfig();
+        cfg.setMaxTotal(Integer.valueOf((String) props.getOrDefault(key(prefix, "maxTotal"), "-1")));
+        cfg.setMaxIdle(Integer.valueOf((String) props.getOrDefault(key(prefix, "maxIdle"), "100")));
+        cfg.setMaxWaitMillis(Integer.valueOf((String) props.getOrDefault(key(prefix, "maxWaitMillis"), "100")));
+        cfg.setMinEvictableIdleTimeMillis(
+                Integer.valueOf((String) props.getOrDefault(key(prefix, "minEvictableIdleTimeMillis"), "864000000")));
+        cfg.setMinIdle(Integer.valueOf((String) props.getOrDefault(key(prefix, "minIdle"), "10")));
+        cfg.setNumTestsPerEvictionRun(
+                Integer.valueOf((String) props.getOrDefault(key(prefix, "numTestsPerEvictionRun"), "10")));
+        cfg.setLifo(Boolean.valueOf(props.getProperty(key(prefix, "lifo"), "false")));
+        cfg.setSoftMinEvictableIdleTimeMillis(
+                Integer.valueOf((String) props.getOrDefault(key(prefix, "softMinEvictableIdleTimeMillis"), "10")));
+        cfg.setTestOnBorrow(Boolean.valueOf(props.getProperty(key(prefix, "testOnBorrow"), "true")));
+        cfg.setTestOnReturn(Boolean.valueOf(props.getProperty(key(prefix, "testOnReturn"), "false")));
+        cfg.setTestWhileIdle(Boolean.valueOf(props.getProperty(key(prefix, "testWhileIdle"), "true")));
+        cfg.setTimeBetweenEvictionRunsMillis(
+                Integer.valueOf((String) props.getOrDefault(key(prefix, "timeBetweenEvictionRunsMillis"), "300000")));
+        cfg.setBlockWhenExhausted(Boolean.valueOf(props.getProperty(key(prefix, "blockWhenExhausted"), "false")));
+        return cfg;
+    }
+
+    private String key(String prefix, String key)
+    {
+        return (prefix == null) ? key : prefix + "." + key;
+    }
+}
+```
+
+
+
+
+
+
+
+第十九步：添加配置类CacheConfig
+
+
+
+```java
+package mao.tools_j2cache.config;
+
+import org.springframework.cache.annotation.CachingConfigurerSupport;
+import org.springframework.cache.interceptor.KeyGenerator;
+
+/**
+ * Project name(项目名称)：j2cache_spring_boot_starter_demo
+ * Package(包名): mao.tools_j2cache.config
+ * Class(类名): CacheConfig
+ * Author(作者）: mao
+ * Author QQ：1296193245
+ * GitHub：https://github.com/maomao124/
+ * Date(创建日期)： 2022/11/5
+ * Time(创建时间)： 21:22
+ * Version(版本): 1.0
+ * Description(描述)：  覆盖 SpringCache 相关配置
+ */
+
+public class CacheConfig extends CachingConfigurerSupport
+{
+    /**
+     * 解决注解：Cacheable 没有指定key时，会将key生成为 ${value}:SimpleKey []
+     * eg： @Cacheable(value = "pinda") ->  pinda:SimpleKey []
+     *
+     * @return {@link KeyGenerator}
+     */
+    @Override
+    public KeyGenerator keyGenerator()
+    {
+        return (target, method, objects) ->
+        {
+            /*StringBuilder sb = new StringBuilder();
+            sb.append(target.getClass().getName());
+            sb.append(StrPool.COLON);
+            sb.append(method.getName());
+            for (Object obj : objects) {
+                if (obj != null) {
+                    sb.append(StrPool.COLON);
+                    sb.append(obj.toString());
+                }
+            }
+            return sb.toString();*/
+            return "";
+        };
+    }
+}
+```
+
+
+
+
+
+第二十步：
