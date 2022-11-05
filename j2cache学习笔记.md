@@ -1420,5 +1420,775 @@ public class TestController
 
 ## 自定义spring boot starter
 
+### 开发starter
 
 
+
+第一步：初始化项目
+
+
+
+创建父工程j2cache_spring_boot_starter_demo
+
+
+
+![image-20221105145503937](img/j2cache学习笔记/image-20221105145503937.png)
+
+
+
+
+
+创建子工程tools-j2cache
+
+
+
+![image-20221105145907691](img/j2cache学习笔记/image-20221105145907691.png)
+
+
+
+
+
+创建子工程use-starter
+
+
+
+![image-20221105150206767](img/j2cache学习笔记/image-20221105150206767.png)
+
+
+
+
+
+
+
+第二步：修改pom文件
+
+
+
+父工程j2cache_spring_boot_starter_demo的pom文件：
+
+
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>2.7.1</version>
+        <relativePath/> <!-- lookup parent from repository -->
+    </parent>
+
+    <groupId>mao</groupId>
+    <artifactId>j2cache_spring_boot_starter_demo</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <name>j2cache_spring_boot_starter_demo</name>
+    <description>j2cache_spring_boot_starter_demo</description>
+    <packaging>pom</packaging>
+
+    <properties>
+        <java.version>1.8</java.version>
+    </properties>
+
+    <dependencies>
+
+    </dependencies>
+
+    <modules>
+        <module>tools-j2cache</module>
+        <module>use-starter</module>
+    </modules>
+
+    <dependencyManagement>
+        <dependencies>
+
+            <dependency>
+                <groupId>net.oschina.j2cache</groupId>
+                <artifactId>j2cache-spring-boot2-starter</artifactId>
+                <version>2.8.0-release</version>
+            </dependency>
+
+            <dependency>
+                <groupId>net.oschina.j2cache</groupId>
+                <artifactId>j2cache-core</artifactId>
+                <version>2.8.0-release</version>
+            </dependency>
+
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>
+
+```
+
+
+
+
+
+子工程tools-j2cache的pom文件：
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <artifactId>j2cache_spring_boot_starter_demo</artifactId>
+        <groupId>mao</groupId>
+        <version>0.0.1-SNAPSHOT</version>
+    </parent>
+    <artifactId>tools-j2cache</artifactId>
+    <name>tools-j2cache</name>
+    <description>tools-j2cache</description>
+
+    <properties>
+
+    </properties>
+
+    <dependencies>
+
+        <!--spring boot starter开发依赖-->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-autoconfigure</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>net.oschina.j2cache</groupId>
+            <artifactId>j2cache-spring-boot2-starter</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>net.oschina.j2cache</groupId>
+            <artifactId>j2cache-core</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-simple</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.objenesis</groupId>
+                    <artifactId>objenesis</artifactId>
+                </exclusion>
+                <exclusion>
+                    <artifactId>javassist</artifactId>
+                    <groupId>org.javassist</groupId>
+                </exclusion>
+                <exclusion>
+                    <artifactId>fastjson</artifactId>
+                    <groupId>com.alibaba</groupId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <dependency>
+            <groupId>org.jgroups</groupId>
+            <artifactId>jgroups</artifactId>
+            <version>3.6.15.Final</version>
+        </dependency>
+
+        <dependency>
+            <artifactId>javassist</artifactId>
+            <groupId>org.javassist</groupId>
+            <version>3.25.0-GA</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.objenesis</groupId>
+            <artifactId>objenesis</artifactId>
+            <version>2.6</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context</artifactId>
+            <scope>compile</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context-support</artifactId>
+            <scope>compile</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+            <scope>compile</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-aspects</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.aspectj</groupId>
+            <artifactId>aspectjrt</artifactId>
+            <version>1.9.2</version>
+        </dependency>
+        <dependency>
+            <groupId>org.aspectj</groupId>
+            <artifactId>aspectjweaver</artifactId>
+            <version>1.9.2</version>
+        </dependency>
+        <dependency>
+            <groupId>aopalliance</groupId>
+            <artifactId>aopalliance</artifactId>
+            <version>1.0</version>
+        </dependency>
+
+        <!--阿里巴巴的FastJson json解析-->
+        <dependency>
+            <groupId>com.alibaba</groupId>
+            <artifactId>fastjson</artifactId>
+            <version>1.2.79</version>
+        </dependency>
+
+    </dependencies>
+
+</project>
+
+```
+
+
+
+
+
+
+
+子工程use-starter的pom文件：
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <artifactId>j2cache_spring_boot_starter_demo</artifactId>
+        <groupId>mao</groupId>
+        <version>0.0.1-SNAPSHOT</version>
+    </parent>
+    <artifactId>use-starter</artifactId>
+    <name>use-starter</name>
+    <description>use-starter</description>
+
+    <properties>
+
+    </properties>
+
+    <dependencies>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>
+```
+
+
+
+
+
+
+
+第三步：修改类J2CacheCache
+
+
+
+```java
+package net.oschina.j2cache.cache.support;
+
+import net.oschina.j2cache.CacheChannel;
+import net.oschina.j2cache.CacheObject;
+import net.oschina.j2cache.NullObject;
+import org.springframework.cache.CacheManager;
+import org.springframework.cache.support.AbstractValueAdaptingCache;
+import org.springframework.cache.support.NullValue;
+
+import java.util.concurrent.Callable;
+
+/**
+ * {@link CacheManager} implementation for J2Cache.
+ */
+public class J2CacheCache extends AbstractValueAdaptingCache
+{
+
+    private CacheChannel cacheChannel;
+
+    private String j2CacheName = "j2cache";
+
+    public J2CacheCache(String cacheName, CacheChannel cacheChannel)
+    {
+        this(cacheName, cacheChannel, true);
+    }
+
+    public J2CacheCache(String cacheName, CacheChannel cacheChannel, boolean allowNullValues)
+    {
+        super(allowNullValues);
+        j2CacheName = cacheName;
+        this.cacheChannel = cacheChannel;
+    }
+
+    @Override
+    public String getName()
+    {
+        return this.j2CacheName;
+    }
+
+    public void setJ2CacheNmae(String name)
+    {
+        this.j2CacheName = name;
+    }
+
+    @Override
+    public Object getNativeCache()
+    {
+        return this.cacheChannel;
+    }
+
+    @Override
+    public <T> T get(Object key, Callable<T> valueLoader)
+    {
+        T value;
+        try
+        {
+            value = valueLoader.call();
+        }
+        catch (Exception ex)
+        {
+            throw new ValueRetrievalException(key, valueLoader, ex);
+        }
+        put(key, value);
+        return value;
+    }
+
+    @Override
+    public void put(Object key, Object value)
+    {
+        cacheChannel.set(j2CacheName, String.valueOf(key), value, super.isAllowNullValues());
+    }
+
+    @Override
+    public ValueWrapper putIfAbsent(Object key, Object value)
+    {
+        if (!cacheChannel.exists(j2CacheName, String.valueOf(key)))
+        {
+            cacheChannel.set(j2CacheName, String.valueOf(key), value);
+        }
+        return get(key);
+    }
+
+    @Override
+    public void evict(Object key)
+    {
+        cacheChannel.evict(j2CacheName, String.valueOf(key));
+    }
+
+    @Override
+    public void clear()
+    {
+        cacheChannel.clear(j2CacheName);
+    }
+
+    @Override
+    protected Object lookup(Object key)
+    {
+        CacheObject cacheObject = cacheChannel.get(j2CacheName, String.valueOf(key));
+        if (cacheObject.rawValue() != null && cacheObject.rawValue().getClass().equals(NullObject.class) && super.isAllowNullValues())
+        {
+            return NullValue.INSTANCE;
+        }
+        return cacheObject.getValue();
+    }
+
+}
+```
+
+
+
+
+
+第四步：修改类J2CacheCacheManger
+
+
+
+```java
+package net.oschina.j2cache.cache.support;
+
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
+import java.util.Set;
+
+import net.oschina.j2cache.CacheChannel;
+import org.springframework.cache.Cache;
+import org.springframework.cache.transaction.AbstractTransactionSupportingCacheManager;
+import org.springframework.util.CollectionUtils;
+
+import java.util.*;
+
+
+/**
+ * {@link Cache} implementation for J2Cache.
+ */
+public class J2CacheCacheManger extends AbstractTransactionSupportingCacheManager
+{
+
+    private boolean allowNullValues = true;
+
+    /**
+     * 缓存名称
+     */
+    private Collection<String> cacheNames;
+
+    private boolean dynamic = true;
+
+    private CacheChannel cacheChannel;
+
+    public J2CacheCacheManger(CacheChannel cacheChannel)
+    {
+        this.cacheChannel = cacheChannel;
+    }
+
+    /**
+     * 加载缓存
+     *
+     * @return {@link Collection}<{@link ?} {@link extends} {@link Cache}>
+     */
+    @Override
+    protected Collection<? extends Cache> loadCaches()
+    {
+        Collection<Cache> caches = new LinkedHashSet<>(cacheNames.size());
+        for (String name : cacheNames)
+        {
+            J2CacheCache cache = new J2CacheCache(name, cacheChannel, allowNullValues);
+            caches.add(cache);
+        }
+        return caches;
+    }
+
+
+    /**
+     * 是允许空值
+     *
+     * @return boolean
+     */
+    public boolean isAllowNullValues()
+    {
+        return allowNullValues;
+    }
+
+    /**
+     * 设置允许空值
+     *
+     * @param allowNullValues 允许空值
+     */
+    public void setAllowNullValues(boolean allowNullValues)
+    {
+        this.allowNullValues = allowNullValues;
+    }
+
+    @Override
+    protected Cache getMissingCache(String name)
+    {
+        return this.dynamic ? new J2CacheCache(name, cacheChannel, allowNullValues) : null;
+    }
+
+
+    /**
+     * 设置缓存名称
+     *
+     * @param cacheNames 缓存名称
+     */
+    public void setCacheNames(Collection<String> cacheNames)
+    {
+        Set<String> newCacheNames = CollectionUtils.isEmpty(cacheNames) ? Collections.emptySet()
+                : new HashSet<>(cacheNames);
+        this.cacheNames = newCacheNames;
+        this.dynamic = newCacheNames.isEmpty();
+    }
+
+}
+```
+
+
+
+
+
+第五步：添加类J2CacheSerializer
+
+
+
+```java
+package net.oschina.j2cache.cache.support.util;
+
+import net.oschina.j2cache.util.SerializationUtils;
+import org.springframework.data.redis.serializer.RedisSerializer;
+import org.springframework.data.redis.serializer.SerializationException;
+
+import java.io.IOException;
+
+
+public class J2CacheSerializer implements RedisSerializer<Object>
+{
+
+    @Override
+    public byte[] serialize(Object t) throws SerializationException
+    {
+        try
+        {
+            return SerializationUtils.serialize(t);
+        }
+        catch (IOException e)
+        {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    @Override
+    public Object deserialize(byte[] bytes) throws SerializationException
+    {
+        try
+        {
+            return SerializationUtils.deserialize(bytes);
+        }
+        catch (IOException e)
+        {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+}
+```
+
+
+
+
+
+第六步：添加类SpringJ2CacheConfigUtil
+
+
+
+```java
+package net.oschina.j2cache.cache.support.util;
+
+import net.oschina.j2cache.J2CacheConfig;
+import org.springframework.core.env.CompositePropertySource;
+import org.springframework.core.env.EnumerablePropertySource;
+import org.springframework.core.env.MapPropertySource;
+import org.springframework.core.env.StandardEnvironment;
+
+public class SpringJ2CacheConfigUtil
+{
+
+    /**
+     * 从spring环境变量中查找j2cache配置
+     */
+    public static J2CacheConfig initFromConfig(StandardEnvironment environment)
+    {
+        J2CacheConfig config = new J2CacheConfig();
+        config.setSerialization(environment.getProperty("j2cache.serialization"));
+        config.setBroadcast(environment.getProperty("j2cache.broadcast"));
+        config.setL1CacheName(environment.getProperty("j2cache.L1.provider_class"));
+        config.setL2CacheName(environment.getProperty("j2cache.L2.provider_class"));
+        config.setSyncTtlToRedis(!"false".equalsIgnoreCase(environment.getProperty("j2cache.sync_ttl_to_redis")));
+        config.setDefaultCacheNullObject("true".equalsIgnoreCase(environment.getProperty("j2cache.default_cache_null_object")));
+        String l2_config_section = environment.getProperty("j2cache.L2.config_section");
+        if (l2_config_section == null || l2_config_section.trim().equals(""))
+        {
+            l2_config_section = config.getL2CacheName();
+        }
+        String l2_section = l2_config_section;
+        //配置在 application.yml 或者 j2cache.properties 中时，这里能正常读取
+        environment.getPropertySources().forEach(a ->
+        {
+            if (a instanceof MapPropertySource)
+            {
+                MapPropertySource c = (MapPropertySource) a;
+                c.getSource().forEach((k, v) ->
+                {
+                    String key = k;
+                    if (key.startsWith(config.getBroadcast() + "."))
+                    {
+                        config.getBroadcastProperties().setProperty(key.substring((config.getBroadcast() + ".").length()),
+                                environment.getProperty(key));
+                    }
+                    if (key.startsWith(config.getL1CacheName() + "."))
+                    {
+                        config.getL1CacheProperties().setProperty(key.substring((config.getL1CacheName() + ".").length()),
+                                environment.getProperty(key));
+                    }
+                    if (key.startsWith(l2_section + "."))
+                    {
+                        config.getL2CacheProperties().setProperty(key.substring((l2_section + ".").length()),
+                                environment.getProperty(key));
+                    }
+                });
+            }
+        });
+
+        //配置在 nacos 中时，上面那段代码无法获取配置
+        if (config.getL1CacheProperties().isEmpty() || config.getL2CacheProperties().isEmpty() || config.getBroadcastProperties().isEmpty())
+        {
+            environment.getPropertySources().forEach(ps ->
+            {
+                String[] propertyNames = new String[]{};
+                if (ps instanceof CompositePropertySource)
+                {
+                    CompositePropertySource cps = (CompositePropertySource) ps;
+                    propertyNames = cps.getPropertyNames();
+                }
+                else if (ps instanceof EnumerablePropertySource)
+                {
+                    EnumerablePropertySource eps = (EnumerablePropertySource) ps;
+                    propertyNames = eps.getPropertyNames();
+                }
+                setProperty(config, environment, l2_section, propertyNames);
+            });
+        }
+        return config;
+    }
+
+    private static void setProperty(J2CacheConfig config, StandardEnvironment environment, String l2_section, String[] propertyNames)
+    {
+        for (String key : propertyNames)
+        {
+            if (key.startsWith(config.getBroadcast() + "."))
+            {
+                config.getBroadcastProperties().setProperty(key.substring((config.getBroadcast() + ".").length()),
+                        environment.getProperty(key));
+            }
+            if (key.startsWith(config.getL1CacheName() + "."))
+            {
+                config.getL1CacheProperties().setProperty(key.substring((config.getL1CacheName() + ".").length()),
+                        environment.getProperty(key));
+            }
+            if (key.startsWith(l2_section + "."))
+            {
+                config.getL2CacheProperties().setProperty(key.substring((l2_section + ".").length()),
+                        environment.getProperty(key));
+            }
+        }
+
+    }
+}
+```
+
+
+
+
+
+第七步：添加类SpringUtil
+
+
+
+```java
+package net.oschina.j2cache.cache.support.util;
+
+import org.springframework.beans.BeansException;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.ApplicationContextAware;
+
+/**
+ * spring 工具类
+ */
+public class SpringUtil implements ApplicationContextAware
+{
+
+    /**
+     * 应用程序上下文
+     */
+    private static ApplicationContext applicationContext;
+
+    /**
+     * 获取applicationContext
+     */
+    public static ApplicationContext getApplicationContext()
+    {
+        return applicationContext;
+    }
+
+    @Override
+    public void setApplicationContext(ApplicationContext applicationContext) throws BeansException
+    {
+        if (net.oschina.j2cache.cache.support.util.SpringUtil.applicationContext == null)
+        {
+            net.oschina.j2cache.cache.support.util.SpringUtil.applicationContext = applicationContext;
+        }
+    }
+
+    /**
+     * 通过name获取 Bean.
+     */
+    public static Object getBean(String name)
+    {
+        return getApplicationContext().getBean(name);
+    }
+
+    /**
+     * 通过class获取Bean.
+     */
+    public static <T> T getBean(Class<T> clazz)
+    {
+        return getApplicationContext().getBean(clazz);
+    }
+
+    /**
+     * 通过name,以及Clazz返回指定的Bean
+     */
+    public static <T> T getBean(String name, Class<T> clazz)
+    {
+        return getApplicationContext().getBean(name, clazz);
+    }
+
+}
+```
