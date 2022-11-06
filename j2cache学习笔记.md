@@ -1670,6 +1670,19 @@ public class TestController
             <version>1.2.79</version>
         </dependency>
 
+        <dependency>
+            <groupId>cn.hutool</groupId>
+            <artifactId>hutool-all</artifactId>
+            <version>5.8.0</version>
+        </dependency>
+
+        <!--spring boot redisson 依赖-->
+        <dependency>
+            <groupId>org.redisson</groupId>
+            <artifactId>redisson-spring-boot-starter</artifactId>
+            <version>3.17.0</version>
+        </dependency>
+
     </dependencies>
 
 </project>
@@ -4481,6 +4494,854 @@ org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
 
 
 ### 使用starter
+
+
+
+第一步：添加tools-j2cache的依赖
+
+
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <artifactId>j2cache_spring_boot_starter_demo</artifactId>
+        <groupId>mao</groupId>
+        <version>0.0.1-SNAPSHOT</version>
+    </parent>
+    <artifactId>use-starter</artifactId>
+    <name>use-starter</name>
+    <description>use-starter</description>
+
+    <properties>
+
+    </properties>
+
+    <dependencies>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>mao</groupId>
+            <artifactId>tools-j2cache</artifactId>
+            <version>0.0.1-SNAPSHOT</version>
+        </dependency>
+
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>
+```
+
+
+
+
+
+
+
+第二步：编写配置文件application.yml
+
+
+
+```yaml
+# 该配置文件，只做注释参考，请勿修改此文件。（修改后也不会有任何效果，如要修改配置，请在nacos中修改redis.yml）
+
+def:
+  redis:
+    ip: 127.0.0.1
+    port: 6379
+    password: 123456
+
+# redis 通用配置
+spring:
+  cache:
+    type: GENERIC
+
+j2cache:
+  # j2cache 配置文件的在项目中/resources文件夹下的路径 （注意，若想将里面的配置存放在naocs或者application.yml中，需要注释这行）
+  # configLocation: /j2cache.properties
+  # 是否开启 SpringCache 支持
+  open-spring-cache: true
+  # 清除缓存的模式
+  #  active:主动清除，二级缓存过期主动通知各节点清除，优点在于所有节点可以同时收到缓存清除
+  #  passive:被动清除，一级缓存过期进行通知各节点清除一二级缓存
+  #  blend:两种模式一起运作，对于各个节点缓存准确以及及时性要求高的可以使用，正常用前两种模式中一个就可
+  cache-clean-mode: passive
+  # 是否允许存放null 值
+  allow-null-values: true
+  # redis 客户端  (可选值： jedis  lettuce)
+  redis-client: lettuce
+  # 是否开启二级缓存  开发环境可以关闭
+  l2-cache-open: true
+
+  #以下来自 j2cache.properties
+  # 缓存广播方式：
+  # jgroups -> 使用jgroups的多播
+  # redis -> 使用redis发布/订阅机制(使用jedis)
+  # lettuce -> 使用redis发布/订阅机制(使用lettuce，推荐)
+  # rabbitmq -> 使用 RabbitMQ 发布/消费 机制
+  # rocketmq -> 使用 RocketMQ 发布/消费 机制
+  # none -> 不要通知集群中的其他节点
+  # xx.xxxx.xxxx.Xxxxx 实现net.oschina.j2cache.cluster.ClusterPolicy的您自己的缓存广播策略类名
+  broadcast: net.oschina.j2cache.cache.support.redis.SpringRedisPubSubPolicy
+  # 1级缓存提供商类，可选值：
+  # none -> 禁用此级别缓存
+  # ehcache -> 使用 ehcache2 作为1级缓存
+  # ehcache3 -> 使用 ehcache3 作为1级缓存
+  # caffeine -> 使用 caffeine 作为1级缓存 (仅作用于内存)
+  L1:
+    provider_class: caffeine
+  # 2级缓存提供商类，可选值：
+  # redis -> 使用 redis 作为2级缓存 (使用 jedis)
+  # lettuce -> 使用 redis 作为2级缓存 (使用 lettuce)
+  # readonly-redis -> 使用 作为2级缓存 ,但永远不要向它写入数据。如果使用此提供程序，则必须取消注释' j2cache.L2.config_section '使redis配置可用。
+  # memcached -> 使用 memcached 作为2级缓存 (使用 xmemcached),
+  # [classname] -> 使用自定义供应商   (当使用自定义时，必须手动指定 L2.config_section )
+  L2:
+    provider_class: net.oschina.j2cache.cache.support.redis.SpringRedisProvider
+    config_section: lettuce
+  # 在redis缓存数据中启用/禁用ttl(如果禁用，redis中的对象将永远不会过期，默认值为true)
+  # 注意:redis哈希模式(redis.storage = hash 和 lettuce.storage = hash)不支持此功能
+  sync_ttl_to_redis: true
+  # 是否默认缓存空对象(默认为false)
+  default_cache_null_object: false
+  # 缓存序列化提供者 ， 可选值：
+  # fst -> 使用 fast 序列化 (推荐)              缺点：增删改字段后反序列化会报错
+  # kyro -> 使用 kyro 序列化                   缺点：生成的byte数据中部包含field数据，对类升级的兼容性很差。  跨语言支持较复杂！
+  # json -> 使用 fst's json 序列化 (测试中)     缺点：不支持LocalDateTime
+  # fastjson -> 使用 fastjson 序列化           缺点：嵌入非静态类不支持， 阿里的东西bug多...
+  # java -> java 标准序列化                    缺点：速度慢，占空间， 增删改字段后反序列化会报错
+  # xxx.xxx.xxxx.Xxx -> [自定义序列化类]
+  serialization: json
+
+# j2cache.serialization=json 时可用
+#json:
+#  map.person: net.oschina.j2cache.demo.Person
+
+# 广播相关配置： jgroups 配置 （当 j2cache.broadcast=jgroups 时，才需要配置）
+jgroups:
+  # 网络配置文件路径 （相对于/resources 目录）
+  configXml: /network.xml
+  # 广播渠道名称
+  channel:
+    name: j2cache
+
+# 广播相关配置： rabbitmq 配置 （当 j2cache.broadcast=rabbitmq 时，才需要配置）
+rabbitmq:
+  exchange: j2cache
+  host: localhost
+  port: 5672
+  username: guest
+  password: guest
+
+# 广播相关配置： rocketmq 配置 （当 j2cache.broadcast=rocketmq 时，才需要配置）
+rocketmq:
+  name: j2cache
+  topic: j2cache
+  # 使用;分割多台主机
+  hosts: 127.0.0.1:9876
+
+# 1级相关缓存配置： （当 j2cache.L1.config_section=ehcache 时，才需要配置）
+ehcache:
+  configXml: /ehcache.xml
+
+# 1级相关缓存配置： （当 j2cache.L1.config_section=ehcache3 时，才需要配置）
+ehcache3:
+  configXml: /ehcache.xml
+  defaultHeapSize: 1000
+
+# 1级相关缓存配置： （当 j2cache.L1.config_section=caffeine 时，才需要配置）
+caffeine:
+  # properties 和 region.[name] 任选一种方式配置
+  properties: /j2cache/caffeine.properties   # 这个配置文件需要放在项目中
+  #region.[name]: size, xxxx[s|m|h|d]
+
+
+# 广播相关配置：redis 配置      （当 j2cache.broadcast=redis 时 或者 j2cache.L2.config_section=redis 时，才需要配置）
+# 2级缓存相关配置： redis 配置   （当 j2cache.broadcast=redis 时 或者 j2cache.L2.config_section=redis 或者 j2cache.L2.provider_class=redis 时，才需要配置）
+redis:
+  # Redis 集群模式
+  # single -> 单 redis 服务
+  # sentinel -> 主从 服务
+  # cluster -> 集群 服务 (数据库配置无效，使用 database = 0）
+  # sharded -> 分片 服务  (密码、数据库必须在 hosts 中指定，且连接池配置无效 ; redis://user:password@127.0.0.1:6379/0）
+  mode: single
+  # redis storage mode (generic|hash)
+  storage: generic
+  # redis发布/订阅频道名称
+  channel: j2cache
+  # redis发布/订阅服务器(该值为空时，使用redis.host)
+  channel.host:
+  # 集群名: 仅用于分片
+  cluster_name: j2cache
+  # redis缓存命名空间可选，默认[空]
+  namespace:
+  hosts: ${def.redis.ip}:${def.redis.port}
+  timeout: 2000
+  password: ${def.redis.password}
+  database: 0
+  maxTotal: 100
+  maxIdle: 10
+  maxWaitMillis: 5000
+  minEvictableIdleTimeMillis: 60000
+  minIdle: 1
+  numTestsPerEvictionRun: 10
+  lifo: false
+  softMinEvictableIdleTimeMillis: 10
+  testOnBorrow: true
+  testOnReturn: false
+  testWhileIdle: true
+  timeBetweenEvictionRunsMillis: 300000
+  blockWhenExhausted: false
+  jmxEnabled: false
+
+# 广播相关配置：lettuce 配置      （当 j2cache.broadcast=lettuce 或者 j2cache.L2.config_section=lettuce 时，才需要配置）
+# 2级缓存相关配置： lettuce 配置（当 j2cache.broadcast=lettuce 或者 j2cache.L2.config_section=lettuce 或者 j2cache.L2.provider_class=redis 时，才需要配置）
+lettuce:
+  mode: single
+  namespace:
+  storage: generic
+  channel: j2cache
+  scheme: redis
+  hosts: ${def.redis.ip}:${def.redis.port}
+  password: ${def.redis.password}
+  database: 0
+  sentinelMasterId:
+  maxTotal: 100
+  maxIdle: 10
+  minIdle: 10
+  timeout: 10000
+
+# 广播相关配置：memcached 配置      （当 j2cache.broadcast=memcached 或者 j2cache.L2.config_section=memcached 时，才需要配置）
+# 2级缓存相关配置：memcached 配置（当 j2cache.broadcast=memcached 或者 j2cache.L2.config_section=memcached 或者 j2cache.L2.provider_class=memcached 时，才需要配置）
+memcached:
+  servers: 127.0.0.1:11211
+  username:
+  password:
+  connectionPoolSize: 10
+  connectTimeout: 1000
+  failureMode: false
+  healSessionInterval: 1000
+  maxQueuedNoReplyOperations: 100
+  opTimeout: 100
+  sanitizeKeys: false
+
+
+
+
+
+
+# 设置日志级别，root表示根节点，即整体应用日志级别
+logging:
+  # 日志输出到文件的文件名
+  file:
+    name: server.log
+  # 字符集
+  charset:
+    file: UTF-8
+  # 分文件
+  logback:
+    rollingpolicy:
+      #最大文件大小
+      max-file-size: 16KB
+      # 文件格式
+      file-name-pattern: logs/server_log/%d{yyyy/MM月/dd日/}%i.log
+  # 设置日志组
+  group:
+    # 自定义组名，设置当前组中所包含的包
+    mao_pro: mao
+  level:
+    root: info
+    # 为对应组设置日志级别
+    mao_pro: debug
+    # 日志输出格式
+  # pattern:
+  # console: "%d %clr(%p) --- [%16t] %clr(%-40.40c){cyan} : %m %n"
+```
+
+
+
+
+
+第三步：编写实体类Student
+
+
+
+```java
+package mao.use_starter.entity;
+
+/**
+ * Project name(项目名称)：j2cache_spring_boot_starter_demo
+ * Package(包名): mao.use_starter.entity
+ * Class(类名): Student
+ * Author(作者）: mao
+ * Author QQ：1296193245
+ * GitHub：https://github.com/maomao124/
+ * Date(创建日期)： 2022/11/5
+ * Time(创建时间)： 23:51
+ * Version(版本): 1.0
+ * Description(描述)： 无
+ */
+
+
+public class Student
+{
+    private Long id;
+    private String name;
+
+    /**
+     * Instantiates a new Student.
+     */
+    public Student()
+    {
+
+    }
+
+    /**
+     * Instantiates a new Student.
+     *
+     * @param id   the id
+     * @param name the name
+     */
+    public Student(Long id, String name)
+    {
+        this.id = id;
+        this.name = name;
+    }
+
+    /**
+     * Gets id.
+     *
+     * @return the id
+     */
+    public Long getId()
+    {
+        return id;
+    }
+
+    /**
+     * Sets id.
+     *
+     * @param id the id
+     */
+    public void setId(Long id)
+    {
+        this.id = id;
+    }
+
+    /**
+     * Gets name.
+     *
+     * @return the name
+     */
+    public String getName()
+    {
+        return name;
+    }
+
+    /**
+     * Sets name.
+     *
+     * @param name the name
+     */
+    public void setName(String name)
+    {
+        this.name = name;
+    }
+}
+```
+
+
+
+
+
+第四步：编写TestController
+
+
+
+```java
+package mao.use_starter.controller;
+
+import mao.tools_j2cache.utils.RedisUtils;
+import mao.use_starter.entity.Student;
+import net.oschina.j2cache.CacheChannel;
+import net.oschina.j2cache.CacheObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
+
+/**
+ * Project name(项目名称)：j2cache_demo
+ * Package(包名): mao.j2cache_demo.controller
+ * Class(类名): TestController
+ * Author(作者）: mao
+ * Author QQ：1296193245
+ * GitHub：https://github.com/maomao124/
+ * Date(创建日期)： 2022/11/5
+ * Time(创建时间)： 13:22
+ * Version(版本): 1.0
+ * Description(描述)： 无
+ */
+
+@RestController
+public class TestController
+{
+
+    private static final Logger log = LoggerFactory.getLogger(TestController.class);
+
+    @Autowired
+    private CacheChannel cacheChannel;
+
+    private final String key = "myKey";
+    private final String region = "rx";
+
+
+    @GetMapping("/getInfos")
+    public List<String> getInfos()
+    {
+        CacheObject cacheObject = cacheChannel.get(region, key);
+        if (cacheObject.getValue() == null)
+        {
+            log.info("查询数据库");
+            //缓存中没有找到，查询数据库获得
+            List<String> data = new ArrayList<>();
+            data.add("info1");
+            data.add("info2");
+            try
+            {
+                Thread.sleep(9);
+            }
+            catch (InterruptedException e)
+            {
+                e.printStackTrace();
+            }
+            //放入缓存
+            cacheChannel.set(region, key, data);
+            return data;
+        }
+        return (List<String>) cacheObject.getValue();
+    }
+
+    private String cache = null;
+
+    @GetMapping("/getInfos2")
+    public String getInfos2()
+    {
+        if (cache == null)
+        {
+            log.info("查询数据库2");
+            try
+            {
+                Thread.sleep(10);
+            }
+            catch (InterruptedException e)
+            {
+                e.printStackTrace();
+            }
+            cache = "hello";
+        }
+        else
+        {
+            return cache;
+        }
+        return cache;
+    }
+
+
+    @GetMapping("/getInfos3")
+    public List<String> getInfos3()
+    {
+        CacheObject cacheObject = cacheChannel.get(region, key);
+        if (cacheObject.getValue() == null)
+        {
+            log.info("查询数据库3");
+            //缓存中没有找到，查询数据库获得
+            try
+            {
+                Thread.sleep(9);
+            }
+            catch (InterruptedException e)
+            {
+                e.printStackTrace();
+            }
+            //放入缓存
+            cacheChannel.set(region, key, null);
+            return null;
+        }
+        return null;
+    }
+
+    /**
+     * 清理指定缓存
+     *
+     * @return {@link String}
+     */
+    @GetMapping("/evict")
+    public String evict()
+    {
+        cacheChannel.evict(region, key);
+        return "evict success";
+    }
+
+    /**
+     * 检测存在哪级缓存
+     *
+     * @return {@link String}
+     */
+    @GetMapping("/check")
+    public String check()
+    {
+        int check = cacheChannel.check(region, key);
+        return "level:" + check;
+    }
+
+    /**
+     * 检测缓存数据是否存在
+     *
+     * @return {@link String}
+     */
+    @GetMapping("/exists")
+    public String exists()
+    {
+        boolean exists = cacheChannel.exists(region, key);
+        return "exists:" + exists;
+    }
+
+    /**
+     * 清理指定区域的缓存
+     *
+     * @return {@link String}
+     */
+    @GetMapping("/clear")
+    public String clear()
+    {
+        cache = null;
+        cacheChannel.clear(region);
+        return "clear success";
+    }
+
+
+    @Autowired
+    private RedisUtils redisUtils;
+
+    private Student queryMysqlById(long id)
+    {
+        log.info("查询Mysql数据库");
+        try
+        {
+            Thread.sleep(10);
+        }
+        catch (InterruptedException e)
+        {
+            e.printStackTrace();
+        }
+        Student student = new Student();
+        student.setId(id);
+        student.setName("张三");
+        return student;
+    }
+
+    /**
+     * 查询mysql ,测试缓存穿透
+     *
+     * @param id id
+     * @return {@link Student}
+     */
+    private Student queryMysqlById2(long id)
+    {
+        log.info("查询Mysql数据库2");
+        try
+        {
+            Thread.sleep(10);
+        }
+        catch (InterruptedException e)
+        {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    private Boolean updateMysqlById(Student student, long id)
+    {
+        log.info("更新Mysql数据库");
+        try
+        {
+            Thread.sleep(10);
+        }
+        catch (InterruptedException e)
+        {
+            e.printStackTrace();
+        }
+        return true;
+    }
+    
+    
+    
+
+    @GetMapping("/query")
+    public Student query()
+    {
+        Student result = redisUtils.query("tools:", "tools:lock:", 1L, Student.class,
+                this::queryMysqlById, 30L, TimeUnit.MINUTES, 60);
+        return result;
+    }
+
+    @GetMapping("/query2")
+    public Student query2()
+    {
+        Student result = redisUtils.query("tools:", "tools:lock:", 2L, Student.class,
+                this::queryMysqlById2, 30L, TimeUnit.MINUTES, 60);
+        return result;
+    }
+
+    @GetMapping("/update")
+    public boolean update()
+    {
+        Student student = new Student();
+        student.setId(1L);
+        student.setName("张三2");
+        boolean update = redisUtils.update(1L, student, "tools:", s -> updateMysqlById(student, 1L));
+        return update;
+    }
+    
+    
+
+}
+
+```
+
+
+
+
+
+
+
+第五步：启动程序
+
+
+
+```sh
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+ :: Spring Boot ::                (v2.7.1)
+
+2022-11-06 13:49:33.554  INFO 6148 --- [           main] mao.use_starter.UseStarterApplication    : Starting UseStarterApplication using Java 1.8.0_332 on mao with PID 6148 (H:\程序\大四上期\j2cache_spring_boot_starter_demo\use-starter\target\classes started by mao in H:\程序\大四上期\j2cache_spring_boot_starter_demo)
+2022-11-06 13:49:33.556 DEBUG 6148 --- [           main] mao.use_starter.UseStarterApplication    : Running with Spring Boot v2.7.1, Spring v5.3.21
+2022-11-06 13:49:33.556  INFO 6148 --- [           main] mao.use_starter.UseStarterApplication    : No active profile set, falling back to 1 default profile: "default"
+2022-11-06 13:49:33.891  INFO 6148 --- [           main] o.s.c.a.ConfigurationClassParser         : Properties location [${j2cache.config-location}] not resolvable: Could not resolve placeholder 'j2cache.config-location' in value "${j2cache.config-location}"
+2022-11-06 13:49:34.361  INFO 6148 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Multiple Spring Data modules found, entering strict repository configuration mode
+2022-11-06 13:49:34.363  INFO 6148 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Bootstrapping Spring Data Redis repositories in DEFAULT mode.
+2022-11-06 13:49:34.382  INFO 6148 --- [           main] .s.d.r.c.RepositoryConfigurationDelegate : Finished Spring Data repository scanning in 5 ms. Found 0 Redis repository interfaces.
+2022-11-06 13:49:34.601  INFO 6148 --- [           main] mao.tools_j2cache.config.CacheConfig     : 初始化 CacheConfig
+2022-11-06 13:49:34.601  INFO 6148 --- [           main] trationDelegate$BeanPostProcessorChecker : Bean 'mao.tools_j2cache.config.CacheConfig' of type [mao.tools_j2cache.config.CacheConfig] is not eligible for getting processed by all BeanPostProcessors (for example: not eligible for auto-proxying)
+2022-11-06 13:49:34.845  INFO 6148 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat initialized with port(s): 8080 (http)
+2022-11-06 13:49:34.853  INFO 6148 --- [           main] o.apache.catalina.core.StandardService   : Starting service [Tomcat]
+2022-11-06 13:49:34.853  INFO 6148 --- [           main] org.apache.catalina.core.StandardEngine  : Starting Servlet engine: [Apache Tomcat/9.0.64]
+2022-11-06 13:49:34.976  INFO 6148 --- [           main] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring embedded WebApplicationContext
+2022-11-06 13:49:34.976  INFO 6148 --- [           main] w.s.c.ServletWebServerApplicationContext : Root WebApplicationContext: initialization completed in 1384 ms
+2022-11-06 13:49:35.182  INFO 6148 --- [           main] n.o.j2cache.util.SerializationUtils      : Using Serializer -> [json:net.oschina.j2cache.util.FstJSONSerializer]
+2022-11-06 13:49:35.185  INFO 6148 --- [           main] net.oschina.j2cache.CacheProviderHolder  : Using L1 CacheProvider : net.oschina.j2cache.caffeine.CaffeineProvider
+2022-11-06 13:49:35.820  INFO 6148 --- [           main] net.oschina.j2cache.CacheProviderHolder  : Using L2 CacheProvider : net.oschina.j2cache.cache.support.redis.SpringRedisProvider
+2022-11-06 13:49:35.832  INFO 6148 --- [           main] net.oschina.j2cache.J2CacheBuilder       : Using cluster policy : net.oschina.j2cache.cache.support.redis.SpringRedisPubSubPolicy
+2022-11-06 13:49:35.854  INFO 6148 --- [           main] mao.tools_j2cache.config.RedissonConfig  : 初始化 RedissonConfig
+2022-11-06 13:49:35.858  INFO 6148 --- [           main] mao.tools_j2cache.config.RedissonConfig  : 单机模式redis:127.0.0.1:6379
+2022-11-06 13:49:35.971  INFO 6148 --- [           main] org.redisson.Version                     : Redisson 3.17.0
+2022-11-06 13:49:36.284  INFO 6148 --- [sson-netty-4-13] o.r.c.pool.MasterPubSubConnectionPool    : 1 connections initialized for 127.0.0.1/127.0.0.1:6379
+2022-11-06 13:49:36.292  INFO 6148 --- [sson-netty-4-19] o.r.c.pool.MasterConnectionPool          : 24 connections initialized for 127.0.0.1/127.0.0.1:6379
+2022-11-06 13:49:36.628  INFO 6148 --- [           main] m.tools_j2cache.config.RedisUtilsConfig  : 初始化 RedisUtilsConfig
+2022-11-06 13:49:36.885  INFO 6148 --- [           main] o.s.b.a.e.web.EndpointLinksResolver      : Exposing 1 endpoint(s) beneath base path '/actuator'
+2022-11-06 13:49:36.925  INFO 6148 --- [           main] o.s.b.w.embedded.tomcat.TomcatWebServer  : Tomcat started on port(s): 8080 (http) with context path ''
+2022-11-06 13:49:37.206  INFO 6148 --- [           main] mao.use_starter.UseStarterApplication    : Started UseStarterApplication in 4.039 seconds (JVM running for 4.968)
+2022-11-06 13:49:37.976  INFO 6148 --- [2)-172.18.144.1] o.a.c.c.C.[Tomcat].[localhost].[/]       : Initializing Spring DispatcherServlet 'dispatcherServlet'
+2022-11-06 13:49:37.976  INFO 6148 --- [2)-172.18.144.1] o.s.web.servlet.DispatcherServlet        : Initializing Servlet 'dispatcherServlet'
+2022-11-06 13:49:37.977  INFO 6148 --- [2)-172.18.144.1] o.s.web.servlet.DispatcherServlet        : Completed initialization in 1 ms
+```
+
+
+
+
+
+第六步：访问
+
+
+
+http://localhost:8080/getInfos2
+
+
+
+![image-20221106135210161](img/j2cache学习笔记/image-20221106135210161.png)
+
+
+
+
+
+http://localhost:8080/check
+
+
+
+![image-20221106135453440](img/j2cache学习笔记/image-20221106135453440.png)
+
+
+
+
+
+
+
+测试并发
+
+
+
+http://localhost:8080/query
+
+
+
+![image-20221106135527798](img/j2cache学习笔记/image-20221106135527798.png)
+
+
+
+
+
+![image-20221106135544479](img/j2cache学习笔记/image-20221106135544479.png)
+
+
+
+
+
+![image-20221106135610501](img/j2cache学习笔记/image-20221106135610501.png)
+
+
+
+
+
+![image-20221106135628313](img/j2cache学习笔记/image-20221106135628313.png)
+
+
+
+
+
+![image-20221106135710897](img/j2cache学习笔记/image-20221106135710897.png)
+
+
+
+
+
+尝试一次更新，让缓存过期
+
+
+
+http://localhost:8080/update
+
+
+
+![image-20221106135758816](img/j2cache学习笔记/image-20221106135758816.png)
+
+
+
+
+
+![image-20221106135818562](img/j2cache学习笔记/image-20221106135818562.png)
+
+
+
+```sh
+2022-11-06 13:57:23.033  INFO 6148 --- [o-8080-exec-124] m.use_starter.controller.TestController  : 更新Mysql数据库
+2022-11-06 13:57:23.062 DEBUG 6148 --- [o-8080-exec-124] mao.tools_j2cache.utils.RedisUtils       : 更新：tools:1
+2022-11-06 13:57:23.197 DEBUG 6148 --- [io-8080-exec-26] mao.tools_j2cache.utils.RedisUtils       : tools:1 获取分布式锁后，缓存未命中，查询数据库
+2022-11-06 13:57:23.197  INFO 6148 --- [io-8080-exec-26] m.use_starter.controller.TestController  : 查询Mysql数据库
+```
+
+
+
+
+
+缓存过期后，只更新了一次数据库
+
+
+
+
+
+测试缓存穿透
+
+
+
+http://localhost:8080/query2
+
+
+
+多次访问
+
+
+
+![image-20221106140455988](img/j2cache学习笔记/image-20221106140455988.png)
+
+
+
+
+
+数据库只查询了一次
+
+
+
+![image-20221106140603754](img/j2cache学习笔记/image-20221106140603754.png)
+
+
+
+
+
+缓存的是一个空字符串
+
+
+
+```sh
+C:\Users\mao>redis-cli
+127.0.0.1:6379> auth 123456
+OK
+127.0.0.1:6379> get tools:2
+""
+127.0.0.1:6379>
+```
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
