@@ -1,3 +1,25 @@
+[TOC]
+
+---
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -4497,7 +4519,7 @@ org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
 
 
 
-第一步：添加tools-j2cache的依赖
+#### 第一步：添加tools-j2cache的依赖
 
 
 
@@ -4558,7 +4580,7 @@ org.springframework.boot.autoconfigure.EnableAutoConfiguration=\
 
 
 
-第二步：编写配置文件application.yml
+#### 第二步：编写配置文件application.yml
 
 
 
@@ -4782,7 +4804,7 @@ logging:
 
 
 
-第三步：编写实体类Student
+#### 第三步：编写实体类Student
 
 
 
@@ -4874,7 +4896,7 @@ public class Student
 
 
 
-第四步：编写TestController
+#### 第四步：编写TestController
 
 
 
@@ -5142,7 +5164,7 @@ public class TestController
 
 
 
-第五步：启动程序
+#### 第五步：启动程序
 
 
 
@@ -5191,7 +5213,7 @@ public class TestController
 
 
 
-第六步：访问
+#### 第六步：访问
 
 
 
@@ -5334,6 +5356,27 @@ OK
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+---
+end
+
+---
+by mao
+2022  11  06
+
+---
 
 
 
